@@ -1,0 +1,21 @@
+# Qovluqlardakı nəhəng paket arxivlərini ləğv edirik
+**/node_modules/
+node_modules/
+
+# Local sazlamalar və şifrələr olan faylları gizlədirik
+.env
+.env.local
+
+# Frontend-in yekun istehsal qovluqları
+**/dist/
+dist/
+
+# Log faylları
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Kod redaktorunun gizli qovluqları
+.vscode/
+.idea/
