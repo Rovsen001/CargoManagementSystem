@@ -2,11 +2,12 @@ const sql = require('mssql');
 
 // SQL Server qoşulma məlumatları
 const config = {
-    user: 'sa', // İndi artıq sa istifadəçimiz aktivdir
-    password: 'MyCargoSql123', // Az əvvəl SSMS-də qoyduğunuz şifrə
-    server: 'HONOR\\SQLEXPRESS',
+    user: 'sa',
+    password: 'MyCargoSql123',
+    server: '127.0.0.1', // Həmişə lokal İP ünvanını yazmaq daha etibarlıdır
     database: 'CargoDB',
     options: {
+        instanceName: 'SQLEXPRESS', // 👈 BU HİSSƏ ÇOX VACİBDİR!
         encrypt: false,
         trustServerCertificate: true
     }

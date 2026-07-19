@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Button, Text } from '@gravity-ui/uikit';
-import { Box } from '@gravity-ui/icons';
+import { Box, LayoutHeaderCellsLarge } from '@gravity-ui/icons'; // 👈 Layout ikonunu əlavə etdik
 
 const MainLayout = () => {
     const navigate = useNavigate();
@@ -14,14 +14,26 @@ const MainLayout = () => {
                 <div style={{ padding: '20px', textAlign: 'center', borderBottom: '1px solid var(--g-color-line-generic)' }}>
                     <Text variant="display-1" color="primary">KARQO</Text>
                 </div>
-                <div style={{ padding: '10px' }}>
+                <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                    {/* YENİ: Ana Səhifə Düyməsi */}
                     <Button
-                        view={location.pathname.includes('packages') || location.pathname === '/' ? 'normal' : 'flat'}
+                        view={location.pathname === '/dashboard' || location.pathname === '/' ? 'normal' : 'flat'}
+                        size="l" width="max" onClick={() => navigate('/dashboard')}
+                    >
+                        <Button.Icon><LayoutHeaderCellsLarge /></Button.Icon>
+                        Ana Səhifə
+                    </Button>
+
+                    {/* Bağlamalar Düyməsi */}
+                    <Button
+                        view={location.pathname.includes('packages') ? 'normal' : 'flat'}
                         size="l" width="max" onClick={() => navigate('/packages')}
                     >
                         <Button.Icon><Box /></Button.Icon>
                         Bağlamalar
                     </Button>
+
                 </div>
             </div>
 
