@@ -20,7 +20,13 @@ const Dashboard = () => {
         fetchStats();
     }, []);
 
-    if (loading) return <Loader size="l" />;
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                <Loader size="l" />
+            </div>
+        );
+    }
 
     // Faiz hesablama funksiyası
     const getPercent = (value) => {
@@ -30,10 +36,10 @@ const Dashboard = () => {
 
     // Qrafik üçün məlumat strukturumuz
     const chartData = [
-        { label: 'Bəyan edildi', value: stats?.declared || 0, color: '#5282ff', theme: 'success' },
+        { label: 'Bəyan edildi', value: stats?.declared || 0, color: '#5282ff', theme: 'info' },
         { label: 'Yoldadır', value: stats?.onTheWay || 0, color: '#f5a623', theme: 'warning' },
         { label: 'Gömrükdə', value: stats?.customs || 0, color: '#ff5c5c', theme: 'danger' },
-        { label: 'Filialda', value: stats?.arrived || 0, color: '#8892b0', theme: 'normal' },
+        { label: 'Filialda', value: stats?.arrived || 0, color: '#3fb950', theme: 'success' },
     ];
 
     // Sütunların hündürlüyünü vizual olaraq tənzimləmək üçün ən böyük dəyəri tapırıq
@@ -41,52 +47,50 @@ const Dashboard = () => {
 
     // Kartların ümumi stili
     const cardStyle = {
-        padding: '24px',
+        padding: '20px',
         display: 'flex',
         flexDirection: 'column',
         gap: '10px',
         minWidth: '180px',
         flex: 1,
-        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)'
+        backgroundColor: '#161b22',
+        border: '1px solid #30363d'
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             <div>
-                <Text variant="header-2" style={{ marginBottom: '4px', display: 'block' }}>Xoş gəldiniz!</Text>
+                <Text variant="header-2" style={{ color: '#fff', marginBottom: '4px', display: 'block' }}>Xoş gəldiniz! 👋</Text>
                 <Text variant="body-1" color="secondary">Karqo sistemindəki son vəziyyət və analitika.</Text>
             </div>
 
             {/* 1. Üst Sıra: Statistika Kartları */}
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                <Card style={cardStyle} theme="info">
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <Card style={cardStyle}>
                     <Text variant="body-2" color="secondary">Cəmi Bağlamalar</Text>
-                    <Text variant="display-2">{stats?.total || 0}</Text>
+                    <Text variant="display-2" style={{ color: '#fff' }}>{stats?.total || 0}</Text>
                 </Card>
                 {chartData.map((item, index) => (
-                    <Card key={index} style={cardStyle} theme={item.theme}>
+                    <Card key={index} style={cardStyle}>
                         <Text variant="body-2" color="secondary">{item.label}</Text>
-                        <Text variant="display-2">{item.value}</Text>
+                        <Text variant="display-2" style={{ color: item.color }}>{item.value}</Text>
                     </Card>
                 ))}
             </div>
 
             {/* 2. Alt Sıra: Vizual Qrafiklər Bölməsi */}
-            <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
 
                 {/* SOL TƏRƏF: Sütun Qrafiki (Bar Chart) */}
-                <Card style={{ padding: '24px', flex: 1, minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <Text variant="subheader-2">📊 Bağlama Statuslarının Sütun Qrafiki</Text>
+                <Card style={{ padding: '24px', flex: 1, minWidth: '320px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <Text variant="subheader-2" style={{ color: '#fff' }}>📊 Bağlama Statuslarının Sütun Qrafiki</Text>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '220px', paddingTop: '20px', borderBottom: '2px solid var(--g-color-line-generic)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '220px', paddingTop: '20px', borderBottom: '1px solid #30363d' }}>
                         {chartData.map((item, index) => {
-                            // Hündürlük faizini tapırıq (Maksimum 100% olacaq şəkildə)
-                            const barHeight = (item.value / maxBarValue) * 150 + 20;
+                            const barHeight = (item.value / maxBarValue) * 150 + 10;
                             return (
-                                <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '60px' }}>
-                                    {/* Sütunun üstündəki rəqəm */}
-                                    <Text variant="body-2" style={{ fontWeight: 'bold' }}>{item.value}</Text>
-                                    {/* Dinamik Sütun */}
+                                <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '50px' }}>
+                                    <Text variant="body-2" style={{ fontWeight: 'bold', color: '#fff' }}>{item.value}</Text>
                                     <div style={{
                                         width: '100%',
                                         height: `${barHeight}px`,
@@ -99,19 +103,18 @@ const Dashboard = () => {
                         })}
                     </div>
 
-                    {/* Qrafikin Altındakı İzahlar (Labels) */}
                     <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
                         {chartData.map((item, index) => (
                             <div key={index} style={{ width: '70px' }}>
-                                <Text variant="caption-1" style={{ display: 'block', lineHeight: '1.2' }}>{item.label}</Text>
+                                <Text variant="caption-1" color="secondary" style={{ display: 'block', lineHeight: '1.2' }}>{item.label}</Text>
                             </div>
                         ))}
                     </div>
                 </Card>
 
                 {/* SAĞ TƏRƏF: Faizlə Proqres Paneli (Progress Chart) */}
-                <Card style={{ padding: '24px', flex: 1, minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <Text variant="subheader-2">📈 Ümumi Paylanma Faizi</Text>
+                <Card style={{ padding: '24px', flex: 1, minWidth: '320px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <Text variant="subheader-2" style={{ color: '#fff' }}>📈 Ümumi Paylanma Faizi</Text>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', justifyContent: 'center', height: '100%' }}>
                         {chartData.map((item, index) => {
@@ -119,12 +122,10 @@ const Dashboard = () => {
                             return (
                                 <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <Text variant="body-2" style={{ fontWeight: '500' }}>{item.label}</Text>
+                                        <Text variant="body-2" style={{ fontWeight: '500', color: '#fff' }}>{item.label}</Text>
                                         <Text variant="body-2" color="secondary">{percent}% ({item.value} ədəd)</Text>
                                     </div>
-                                    {/* Arxa fon xətti */}
-                                    <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--g-color-base-generic-hover)', borderRadius: '5px', overflow: 'hidden' }}>
-                                        {/* Doldurucu rəngli xətt */}
+                                    <div style={{ width: '100%', height: '10px', backgroundColor: '#21262d', borderRadius: '5px', overflow: 'hidden' }}>
                                         <div style={{
                                             width: `${percent}%`,
                                             height: '100%',

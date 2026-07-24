@@ -1,73 +1,377 @@
 import React, { useState, useEffect } from 'react';
-import { ThemeProvider, Button, Text } from '@gravity-ui/uikit';
+import { ThemeProvider, Button, Text, Icon, Avatar, Label, Modal, TextInput, Card } from '@gravity-ui/uikit';
+import { Box, Gear } from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
+import Navbar from './components/Navigation/Navbar';
+import Footer from './components/Footer/Footer';
+import PaymentModal from './components/Payment/PaymentModal';
+import WarehouseAddressesModal from './components/Home/WarehouseAddressesModal';
+import Home from './pages/Home/Home';
+import Dashboard from './pages/Dashboard';
 import Packages from './pages/Packages';
+import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import api from './services/api';
 
 function App() {
     const [user, setUser] = useState(null);
-    const [authMode, setAuthMode] = useState('login'); // 'login' və ya 'register'
+    const [authMode, setAuthMode] = useState('home'); // 'home', 'login', 'register'
 
-    // Proqram açılanda istifadəçinin daxil olub-olmadığını localStroage-dən yoxlayırıq
+    // Active Page state for Navigation
+    const [activePage, setActivePage] = useState('home'); // 'home', 'packages', 'finance', 'warehouses', 'dashboard', 'customers', 'reports'
+
+    // Balance state synced for Header Navbar
+    const [userBalance, setUserBalance] = useState(45.50);
+
+    // Modals
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+    // Profile Change Password state
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [passMsg, setPassMsg] = useState({ text: '', type: '' });
+    const [passLoading, setPassLoading] = useState(false);
+
     useEffect(() => {
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
-            setUser(JSON.parse(savedUser));
+            const parsed = JSON.parse(savedUser);
+            setUser(parsed);
+            if (parsed.balance !== undefined) {
+                setUserBalance(parsed.balance);
+            }
         }
     }, []);
 
-    // Çıxış Etmək (Logout)
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
-        setAuthMode('login');
+        setIsProfileOpen(false);
+        setAuthMode('home');
+        setActivePage('home');
     };
+
+    const onLoginSuccess = (userData) => {
+        setUser(userData);
+        if (userData.balance !== undefined) {
+            setUserBalance(userData.balance);
+        }
+        setActivePage('home');
+    };
+
+    const getUserInitials = () => {
+        if (!user) return 'U';
+        if (user.firstName && user.lastName) {
+            return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+        }
+        return user.fullName ? user.fullName.substring(0, 2).toUpperCase() : 'U';
+    };
+
+    const handleTopUpSuccess = async (amountVal) => {
+        const newBal = parseFloat(userBalance) + parseFloat(amountVal);
+        setUserBalance(newBal);
+        if (user) {
+            const updated = { ...user, balance: newBal };
+            setUser(updated);
+            localStorage.setItem('user', JSON.stringify(updated));
+            try {
+                await api.post('/finance/top-up', { userId: user.id, amount: amountVal });
+            } catch (err) {
+                console.error("Backend top-up notification failed, updated locally:", err);
+            }
+        }
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        setPassMsg({ text: '', type: '' });
+
+        if (!oldPassword || !newPassword) {
+            setPassMsg({ text: 'Zəhmət olmasa bütün xanaları doldurun!', type: 'error' });
+            return;
+        }
+
+        setPassLoading(true);
+        try {
+            const res = await api.post('/auth/change-password', {
+                userId: user.id,
+                oldPassword,
+                newPassword
+            });
+            setPassMsg({ text: res.data.message || 'Şifrə yeniləndi!', type: 'success' });
+            setOldPassword('');
+            setNewPassword('');
+        } catch (err) {
+            setPassMsg({ text: err.response?.data?.message || 'Şifrə dəyişdirilərkən xəta baş verdi!', type: 'error' });
+        } finally {
+            setPassLoading(false);
+        }
+    };
+
+    // Check if the current user is an Admin or Staff requiring internal backoffice sidebar
+    const isAdminOrStaff = user && (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Staff' || user.role === 'Courier');
 
     return (
         <ThemeProvider theme="dark">
-            <div style={{ minHeight: '100vh', backgroundColor: '#0d1117', color: '#c9d1d9' }}>
+            <div style={{ minHeight: '100vh', backgroundColor: '#0d1117', color: '#c9d1d9', display: 'flex', flexDirection: 'column' }}>
 
-                {/* HEADER / NAVIGATSIYA */}
-                <header style={{
-                    display: 'flex',
-                    justify: 'space-between',
-                    alignItems: 'center',
-                    padding: '16px 32px',
-                    borderBottom: '1px solid #30363d',
-                    backgroundColor: '#161b22'
-                }}>
-                    <Text variant="header-2" style={{ color: '#58a6ff' }}>📦 CargoMS</Text>
-
-                    {user && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <Text variant="body-2">
-                                👤 {user.fullName} <strong style={{ color: '#58a6ff' }}>({user.role})</strong>
-                            </Text>
-                            <Button view="flat-danger" onClick={handleLogout}>
-                                Çıxış Et
-                            </Button>
+                {/* IF CUSTOMER OR GUEST: RENDER MODERN WEBSITE NAVBAR */}
+                {!isAdminOrStaff ? (
+                    <Navbar
+                        user={user}
+                        activePage={activePage}
+                        authMode={authMode}
+                        onNavigate={(page) => {
+                            setActivePage(page);
+                            setAuthMode('home');
+                        }}
+                        onNavigateAuth={(mode) => setAuthMode(mode)}
+                        onOpenPayment={() => setIsPaymentModalOpen(true)}
+                        onOpenProfile={() => setIsProfileOpen(true)}
+                        balance={userBalance}
+                    />
+                ) : (
+                    /* IF ADMIN / STAFF: RENDER ADMINISTRATIVE BACKOFFICE HEADER */
+                    <header style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 32px',
+                        borderBottom: '1px solid #30363d',
+                        backgroundColor: '#161b22',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 100
+                    }}>
+                        <div
+                            onClick={() => setActivePage('home')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                        >
+                            <div style={{ backgroundColor: '#d97706', padding: '8px', borderRadius: '8px', display: 'flex' }}>
+                                <Icon data={Box} size={20} style={{ color: '#ffffff' }} />
+                            </div>
+                            <div>
+                                <Text variant="header-2" style={{ color: '#ffffff', fontSize: '18px', fontWeight: 'bold' }}>
+                                    CargoMS Admin & Staff Control
+                                </Text>
+                            </div>
                         </div>
-                    )}
-                </header>
 
-                {/* ANA MƏZMUN */}
-                <main style={{ padding: '32px', maxWidth: '1200px', margin: '0 auto' }}>
-                    {user ? (
-                        <Packages />
-                    ) : authMode === 'login' ? (
-                        <Login
-                            onLoginSuccess={(userData) => setUser(userData)}
-                            switchToRegister={() => setAuthMode('register')}
-                        />
-                    ) : (
-                        <Register
-                            switchToLogin={() => setAuthMode('login')}
-                        />
-                    )}
-                </main>
+                        <div
+                            onClick={() => setIsProfileOpen(true)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '6px 14px',
+                                backgroundColor: '#21262d',
+                                border: '1px solid #30363d',
+                                borderRadius: '30px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                userSelect: 'none'
+                            }}
+                        >
+                            <Avatar
+                                text={getUserInitials()}
+                                size="m"
+                                theme="warning"
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                                <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
+                                    {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
+                                </Text>
+                                <Label size="s" theme="warning">{user.role}</Label>
+                            </div>
+                        </div>
+                    </header>
+                )}
 
+                {/* MAIN CONTENT AREA */}
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+                    {/* ADMIN / STAFF SIDEBAR (ONLY SHOWN FOR BACKOFFICE MANAGEMENT) */}
+                    {isAdminOrStaff && (
+                        <aside style={{
+                            width: '240px',
+                            backgroundColor: '#161b22',
+                            borderRight: '1px solid #30363d',
+                            padding: '24px 16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                        }}>
+                            <Button
+                                view={activePage === 'home' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('home')}
+                            >
+                                Ana Səhifə
+                            </Button>
+                            <Button
+                                view={activePage === 'dashboard' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('dashboard')}
+                            >
+                                Dashboard
+                            </Button>
+                            <Button
+                                view={activePage === 'packages' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('packages')}
+                            >
+                                Bağlamalar
+                            </Button>
+                            <Button
+                                view={activePage === 'finance' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('finance')}
+                            >
+                                Maliyyə və Balans
+                            </Button>
+
+                            <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
+                                <Button
+                                    view="flat-secondary"
+                                    width="max"
+                                    style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setIsProfileOpen(true)}
+                                >
+                                    <Icon data={Gear} style={{ marginRight: '8px' }} /> Profil Və Ayarlar
+                                </Button>
+                            </div>
+                        </aside>
+                    )}
+
+                    {/* CONTENT BODY */}
+                    <main style={{ flex: 1, padding: '32px 24px', overflowY: 'auto' }}>
+                        {user ? (
+                            <>
+                                {activePage === 'home' && (
+                                    <Home
+                                        user={user}
+                                        onNavigate={(page) => setActivePage(page)}
+                                    />
+                                )}
+                                {activePage === 'packages' && <Packages />}
+                                {activePage === 'finance' && <FinancePage />}
+                                {activePage === 'warehouses' && <WarehouseAddressesModal user={user} />}
+                                {activePage === 'dashboard' && <Dashboard />}
+                            </>
+                        ) : authMode === 'home' ? (
+                            <Home
+                                user={null}
+                                onNavigateLogin={() => setAuthMode('login')}
+                                onNavigateRegister={() => setAuthMode('register')}
+                            />
+                        ) : authMode === 'login' ? (
+                            <Login
+                                onLoginSuccess={onLoginSuccess}
+                                switchToRegister={() => setAuthMode('register')}
+                            />
+                        ) : (
+                            <Register
+                                switchToLogin={() => setAuthMode('login')}
+                            />
+                        )}
+                    </main>
+                </div>
+
+                {/* IF CUSTOMER OR GUEST: RENDER WEBSITE FOOTER */}
+                {!isAdminOrStaff && (
+                    <Footer onNavigate={(page) => setActivePage(page)} />
+                )}
+
+                {/* GLOBAL PAYMENT MODAL */}
+                <PaymentModal
+                    open={isPaymentModalOpen}
+                    onClose={() => setIsPaymentModalOpen(false)}
+                    currentBalance={userBalance}
+                    onPaymentSuccess={handleTopUpSuccess}
+                    userId={user ? user.id : null}
+                />
+
+                {/* PROFILE MODAL */}
+                {user && (
+                    <Modal open={isProfileOpen} onClose={() => setIsProfileOpen(false)}>
+                        <div style={{ padding: '28px', width: '450px', backgroundColor: '#161b22', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid #30363d', paddingBottom: '16px' }}>
+                                <Avatar text={getUserInitials()} size="xl" theme={user.role === 'Admin' ? 'warning' : 'normal'} />
+                                <div>
+                                    <Text variant="header-2" style={{ color: '#ffffff' }}>
+                                        {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
+                                    </Text>
+                                    <Text variant="body-1" color="secondary" style={{ display: 'block' }}>{user.email}</Text>
+                                    <div style={{ marginTop: '6px' }}>
+                                        <Label theme={user.role === 'Admin' ? 'warning' : 'info'}>{user.role} Hesabı</Label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Card style={{ padding: '16px', backgroundColor: '#0d1117', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <Text color="secondary">Müştəri ID Kodu:</Text>
+                                    <Text style={{ fontWeight: 'bold', color: '#58a6ff' }}>#C-{user.id ? user.id + 10400 : '10492'}</Text>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <Text color="secondary">Hesab Statusu:</Text>
+                                    <Text style={{ color: '#56d364', fontWeight: 'bold' }}>Aktiv</Text>
+                                </div>
+                            </Card>
+
+                            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <Text variant="subheader-1">🔐 Şifrəni Yenilə</Text>
+
+                                {passMsg.text && (
+                                    <div style={{
+                                        padding: '8px 12px',
+                                        borderRadius: '6px',
+                                        fontSize: '13px',
+                                        backgroundColor: passMsg.type === 'error' ? '#3d1618' : '#13231b',
+                                        color: passMsg.type === 'error' ? '#ff7b72' : '#56d364',
+                                        border: `1px solid ${passMsg.type === 'error' ? '#f85149' : '#2ea043'}`
+                                    }}>
+                                        {passMsg.text}
+                                    </div>
+                                )}
+
+                                <div>
+                                    <Text variant="caption-2" style={{ marginBottom: '4px', display: 'block' }}>Cari Şifrə</Text>
+                                    <TextInput
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={oldPassword}
+                                        onChange={(e) => setOldPassword(e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Text variant="caption-2" style={{ marginBottom: '4px', display: 'block' }}>Yeni Şifrə</Text>
+                                    <TextInput
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                    />
+                                </div>
+
+                                <Button view="outlined" type="submit" loading={passLoading} style={{ marginTop: '4px' }}>
+                                    Şifrəni Dəyişdir
+                                </Button>
+                            </form>
+
+                            <div style={{ borderTop: '1px solid #30363d', paddingTop: '16px', display: 'flex', justifyContent: 'space-between' }}>
+                                <Button view="flat" onClick={() => setIsProfileOpen(false)}>Bağla</Button>
+                                <Button view="outlined-danger" onClick={handleLogout}>
+                                    Hesabdan Çıxış Et
+                                </Button>
+                            </div>
+                        </div>
+                    </Modal>
+                )}
             </div>
         </ThemeProvider>
     );
