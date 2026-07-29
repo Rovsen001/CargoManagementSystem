@@ -1,9 +1,27 @@
 // Frontend/src/components/Home/StaffHome.jsx
-import React from 'react';
-import { Card, Text, Button, Avatar, Label } from '@gravity-ui/uikit';
+import React, { useState, useEffect } from 'react';
+import { Card, Text, Button, Avatar, Label, Loader } from '@gravity-ui/uikit';
 import { Box, Rocket, ShieldCheck } from '@gravity-ui/icons';
+import api from '../../services/api';
 
 const StaffHome = ({ user, onNavigate }) => {
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState(null);
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const response = await api.get('/packages/stats');
+                setStats(response.data);
+            } catch (error) {
+                console.error("Anbar statistikası çəkilərkən xəta:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStats();
+    }, []);
+
     const getUserInitials = () => {
         if (!user) return 'M';
         if (user.firstName && user.lastName) {
@@ -11,6 +29,14 @@ const StaffHome = ({ user, onNavigate }) => {
         }
         return user.fullName ? user.fullName.substring(0, 2).toUpperCase() : 'M';
     };
+
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+                <Loader size="l" />
+            </div>
+        );
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -42,7 +68,7 @@ const StaffHome = ({ user, onNavigate }) => {
                             <Label theme="success" size="m">{user.role || 'Personal'}</Label>
                         </div>
                         <Text variant="body-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                            Növbətçi Filial: <strong style={{ color: '#56d364' }}>Bakı Mərkəzi Anbarı</strong> | Son Barkod Skanlama: 5 dəq öncə
+                            Sistemdəki cəmi bağlama sayı: <strong style={{ color: '#56d364' }}>{stats?.total || 0}</strong>
                         </Text>
                     </div>
                 </div>
@@ -63,40 +89,40 @@ const StaffHome = ({ user, onNavigate }) => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                 <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Daxil Olan Reyslər</Text>
+                        <Text variant="body-1" color="secondary">Yeni Bəyan Edilmiş</Text>
                         <Rocket style={{ color: '#58a6ff' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        2 Təyyarə Reysi
+                        {stats?.declared || 0} Bağlama
                     </Text>
                     <Text variant="caption-2" style={{ color: '#58a6ff', marginTop: '4px', display: 'block' }}>
-                        Gözlənilən vaxt: 14:30
+                        Anbara qəbul gözləyir
                     </Text>
                 </Card>
 
                 <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Çeşidlənməyə Hazır</Text>
+                        <Text variant="body-1" color="secondary">Yolda / Gömrükdə</Text>
                         <Box style={{ color: '#e3b341' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        128 Bağlama
+                        {(stats?.onTheWay || 0) + (stats?.customs || 0)} Bağlama
                     </Text>
                     <Text variant="caption-2" style={{ color: '#e3b341', marginTop: '4px', display: 'block' }}>
-                        Ağıllı konveyer xətti
+                        Çeşidlənməyə hazırlaşır
                     </Text>
                 </Card>
 
                 <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Təhvil Verildi (Bu gün)</Text>
+                        <Text variant="body-1" color="secondary">Filialda / Təhvil Verilib</Text>
                         <ShieldCheck style={{ color: '#56d364' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#56d364', marginTop: '12px', display: 'block' }}>
-                        94 Bağlama
+                        {stats?.arrived || 0} Bağlama
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                        Müştərilərə təhvil
+                        Müştərilərə təhvilə hazır / verilib
                     </Text>
                 </Card>
             </div>

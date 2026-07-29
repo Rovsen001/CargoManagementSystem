@@ -1,9 +1,35 @@
 // Frontend/src/components/Home/CustomerHome.jsx
-import React from 'react';
-import { Card, Text, Button, Avatar, Label } from '@gravity-ui/uikit';
+import React, { useState, useEffect } from 'react';
+import { Card, Text, Button, Avatar, Label, Loader } from '@gravity-ui/uikit';
 import { Box, Plus, Wallet, ArrowRight, ShieldCheck } from '@gravity-ui/icons';
+import api from '../../services/api';
 
 const CustomerHome = ({ user, onNavigate }) => {
+    const [loading, setLoading] = useState(true);
+    const [activePackages, setActivePackages] = useState([]);
+    const [archivedCount, setArchivedCount] = useState(0);
+    const [balance, setBalance] = useState(0);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [activeRes, archivedRes, balanceRes] = await Promise.all([
+                    api.get(`/packages?archived=false&userId=${user.id}&role=${user.role}`),
+                    api.get(`/packages?archived=true&userId=${user.id}&role=${user.role}`),
+                    api.get(`/finance/my-balance?userId=${user.id}`)
+                ]);
+                setActivePackages(Array.isArray(activeRes.data) ? activeRes.data : []);
+                setArchivedCount(Array.isArray(archivedRes.data) ? archivedRes.data.length : 0);
+                setBalance(balanceRes.data.balance || 0);
+            } catch (error) {
+                console.error("Müştəri paneli məlumatları çəkilərkən xəta:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        if (user?.id) fetchData();
+    }, [user]);
+
     const getUserInitials = () => {
         if (!user) return 'C';
         if (user.firstName && user.lastName) {
@@ -11,6 +37,20 @@ const CustomerHome = ({ user, onNavigate }) => {
         }
         return user.fullName ? user.fullName.substring(0, 2).toUpperCase() : 'C';
     };
+
+    const arrivedCount = activePackages.filter((p) => p.status === 'Filialda').length;
+    const onTheWayCount = activePackages.filter((p) => p.status === 'Yoldadır' || p.status === 'Gömrükdə').length;
+    const recentPackages = [...activePackages].sort((a, b) => b.id - a.id).slice(0, 3);
+
+    const statusTheme = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success' };
+
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+                <Loader size="l" />
+            </div>
+        );
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -75,10 +115,10 @@ const CustomerHome = ({ user, onNavigate }) => {
                         <Box style={{ color: '#1f6feb' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        3 Bağlama
+                        {activePackages.length} Bağlama
                     </Text>
                     <Text variant="caption-2" style={{ color: '#58a6ff', marginTop: '4px', display: 'block' }}>
-                        2-si yoldadır, 1-i anbardadır
+                        {onTheWayCount} yoldadır, {arrivedCount} anbardadır
                     </Text>
                 </Card>
 
@@ -88,10 +128,10 @@ const CustomerHome = ({ user, onNavigate }) => {
                         <Wallet style={{ color: '#56d364' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#56d364', marginTop: '12px', display: 'block' }}>
-                        ₼ 45.50
+                        ₼ {parseFloat(balance).toFixed(2)}
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                        Son artırma: 22 İyul
+                        Maliyyə səhifəsindən artırın
                     </Text>
                 </Card>
 
@@ -101,7 +141,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                         <Box style={{ color: '#e3b341' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        1 Bağlama
+                        {arrivedCount} Bağlama
                     </Text>
                     <Text variant="caption-2" style={{ color: '#e3b341', marginTop: '4px', display: 'block' }}>
                         Bakı Baş Anbarı
@@ -110,14 +150,14 @@ const CustomerHome = ({ user, onNavigate }) => {
 
                 <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Ümumi Xərc (Bu ay)</Text>
+                        <Text variant="body-1" color="secondary">Tamamlanmış Bağlamalar</Text>
                         <ShieldCheck style={{ color: '#a371f7' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        $ 28.40
+                        {archivedCount}
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                        4 uğurlu çatdırılma
+                        Arxivlənmiş bağlamalar
                     </Text>
                 </Card>
             </div>
@@ -137,53 +177,26 @@ const CustomerHome = ({ user, onNavigate }) => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1.5fr 1fr 1fr 1fr',
-                        padding: '12px 16px',
-                        backgroundColor: '#0d1117',
-                        borderRadius: '8px',
-                        alignItems: 'center',
-                        border: '1px solid #21262d'
-                    }}>
-                        <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>TR94028114</Text>
-                        <Text color="secondary">Trendyol (Geyim & Aksessuar)</Text>
-                        <Text color="secondary">🇹🇷 Türkiyə (0.8 kq)</Text>
-                        <div><Label theme="info">Bakıya yoldadır</Label></div>
-                        <Text style={{ color: '#56d364', fontWeight: 600 }}>$ 4.50</Text>
-                    </div>
-
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1.5fr 1fr 1fr 1fr',
-                        padding: '12px 16px',
-                        backgroundColor: '#0d1117',
-                        borderRadius: '8px',
-                        alignItems: 'center',
-                        border: '1px solid #21262d'
-                    }}>
-                        <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>US77401928</Text>
-                        <Text color="secondary">Amazon US (Elektronika)</Text>
-                        <Text color="secondary">🇺🇸 ABŞ (1.4 kq)</Text>
-                        <div><Label theme="warning">Xarici Anbardadır</Label></div>
-                        <Text style={{ color: '#56d364', fontWeight: 600 }}>$ 10.50</Text>
-                    </div>
-
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1.5fr 1fr 1fr 1fr',
-                        padding: '12px 16px',
-                        backgroundColor: '#0d1117',
-                        borderRadius: '8px',
-                        alignItems: 'center',
-                        border: '1px solid #21262d'
-                    }}>
-                        <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>TR83019245</Text>
-                        <Text color="secondary">Hepsiburada (Kitab & Dəftərxana)</Text>
-                        <Text color="secondary">🇹🇷 Türkiyə (0.4 kq)</Text>
-                        <div><Label theme="success">Təhvil Verildi</Label></div>
-                        <Text style={{ color: '#8b949e' }}>$ 3.50</Text>
-                    </div>
+                    {recentPackages.length > 0 ? recentPackages.map((pkg) => (
+                        <div key={pkg.id} style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1.2fr 1fr 1fr 1fr',
+                            padding: '12px 16px',
+                            backgroundColor: '#0d1117',
+                            borderRadius: '8px',
+                            alignItems: 'center',
+                            border: '1px solid #21262d'
+                        }}>
+                            <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>{pkg.trackingNumber}</Text>
+                            <Text color="secondary">{pkg.weight || '-'}</Text>
+                            <div><Label theme={statusTheme[pkg.status] || 'normal'}>{pkg.status || 'Təyin edilməyib'}</Label></div>
+                            <Text style={{ color: '#56d364', fontWeight: 600 }}>{pkg.price || '-'}</Text>
+                        </div>
+                    )) : (
+                        <Text color="secondary" style={{ padding: '20px 0', textAlign: 'center', display: 'block' }}>
+                            Hələ aktiv bağlamanız yoxdur.
+                        </Text>
+                    )}
                 </div>
             </Card>
         </div>

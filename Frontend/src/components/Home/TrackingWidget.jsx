@@ -1,8 +1,8 @@
 // frontend/src/components/Home/TrackingWidget.jsx
 import React, { useState } from 'react';
-import axios from 'axios';
 import { Card, TextInput, Button, Text, Alert } from '@gravity-ui/uikit';
 import { Magnifier } from '@gravity-ui/icons';
+import api from '../../services/api';
 
 const TrackingWidget = () => {
     const [trackingCode, setTrackingCode] = useState('');
@@ -19,7 +19,7 @@ const TrackingWidget = () => {
         setPackageData(null);
 
         try {
-            const response = await axios.get(`/api/public/track/${trackingCode}`);
+            const response = await api.get(`/public/track/${trackingCode.trim()}`);
             setPackageData(response.data);
         } catch (err) {
             setError('Bağlama tapılmadı. Zəhmət olmasa izləmə kodunu düzgün daxil edin.');
@@ -82,13 +82,16 @@ const TrackingWidget = () => {
                 {packageData && (
                     <Card view="outlined" style={{ padding: '16px', marginTop: '12px', backgroundColor: '#0d1117', borderColor: '#30363d' }}>
                         <Text variant="subheader-2" style={{ display: 'block', marginBottom: '8px', color: '#ffffff' }}>
-                            Status: <Text color="positive">{packageData.status_az || packageData.status}</Text>
+                            Trek Nömrəsi: <Text color="primary">{packageData.trackingNumber}</Text>
+                        </Text>
+                        <Text variant="body-1" style={{ display: 'block' }}>
+                            Status: <Text color="positive">{packageData.status || 'Təyin edilməyib'}</Text>
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                            Çıxış ölkəsi: {packageData.origin_country || 'Türkiyə'}
+                            Çəki: {packageData.weight || '-'}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                            Son yenilənmə: {packageData.updated_at ? new Date(packageData.updated_at).toLocaleDateString('az-AZ') : 'Bugün'}
+                            Qiymət: {packageData.price || '-'}
                         </Text>
                     </Card>
                 )}

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const sql = require('mssql');
@@ -8,16 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const JWT_SECRET = 'kargo_secret_key_12345';
+const JWT_SECRET = process.env.JWT_SECRET;
 const config = {
-    user: 'sa',
-    password: 'MyCargoSql123', // 👈 Öz şifrənizi yazın
-    server: '127.0.0.1',
-    database: 'CargoDB',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER,
+    database: process.env.DB_NAME,
     options: {
         encrypt: false,
         trustServerCertificate: true,
-        instanceName: 'SQLEXPRESS'
+        instanceName: process.env.DB_INSTANCE
     }
 };
 let pool;
@@ -59,12 +60,13 @@ app.post('/api/auth/register', async (req, res) => {
         await pool.request()
             .input('firstName', sql.NVarChar, firstName)
             .input('lastName', sql.NVarChar, lastName)
+            .input('fullName', sql.NVarChar, `${firstName} ${lastName}`)
             .input('email', sql.NVarChar, email)
             .input('password', sql.NVarChar, hashedPassword)
             .input('role', sql.NVarChar, userRole)
             .query(`
-        INSERT INTO Users (firstName, lastName, email, password, role) 
-        VALUES (@firstName, @lastName, @email, @password, @role)
+        INSERT INTO Users (firstName, lastName, fullName, email, password, role)
+        VALUES (@firstName, @lastName, @fullName, @email, @password, @role)
       `);
 
         res.status(201).json({ message: "Qeydiyyat uğurludur! İndi daxil ola bilərsiniz." });
@@ -157,6 +159,28 @@ app.post('/api/auth/change-password', async (req, res) => {
     }
 });
 
+
+// ==========================================
+// 🔎 İCTİMAİ İZLƏMƏ (LOGIN TƏLƏB OLUNMUR)
+// ==========================================
+
+app.get('/api/public/track/:trackingNumber', async (req, res) => {
+    const { trackingNumber } = req.params;
+
+    try {
+        const result = await pool.request()
+            .input('trackingNumber', sql.NVarChar, trackingNumber)
+            .query('SELECT trackingNumber, weight, price, status FROM Packages WHERE trackingNumber = @trackingNumber AND isDeleted = 0');
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ message: 'Bağlama tapılmadı' });
+        }
+
+        res.json(result.recordset[0]);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
 // ==========================================
 // 📦 PACKAGES API MARŞRUTLARI (ROLA UYĞUN)
@@ -385,6 +409,31 @@ app.get('/api/packages/stats', async (req, res) => {
 // 💰 MALİYYƏ VƏ BALANS API MARŞRUTLARI
 // ==========================================
 
+// 0. Admin üçün Ümumi Gəlir Statistikası
+app.get('/api/finance/admin-summary', async (req, res) => {
+    try {
+        const totalResult = await pool.request().query(`
+            SELECT ISNULL(SUM(amount), 0) as totalRevenue
+            FROM transactions WHERE type = 'inkam'
+        `);
+
+        const monthResult = await pool.request().query(`
+            SELECT ISNULL(SUM(amount), 0) as monthRevenue
+            FROM transactions
+            WHERE type = 'inkam'
+              AND MONTH(created_at) = MONTH(GETDATE())
+              AND YEAR(created_at) = YEAR(GETDATE())
+        `);
+
+        res.json({
+            totalRevenue: totalResult.recordset[0].totalRevenue,
+            monthRevenue: monthResult.recordset[0].monthRevenue
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // 1. Balans və Tranzaksiya Tarixçəsini Gətir
 app.get('/api/finance/my-balance', async (req, res) => {
     const { userId } = req.query;
@@ -450,7 +499,7 @@ app.post('/api/finance/top-up', async (req, res) => {
 // ==========================================
 // 🚀 SERVERİ BAŞLATMAQ
 // ==========================================
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server ${PORT} portunda çalışır...`);
 });

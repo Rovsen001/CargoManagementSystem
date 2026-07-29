@@ -9,6 +9,7 @@ import WarehouseAddressesModal from './components/Home/WarehouseAddressesModal';
 import Home from './pages/Home/Home';
 import Dashboard from './pages/Dashboard';
 import Packages from './pages/Packages';
+import Customers from './pages/Customers';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -232,6 +233,15 @@ function App() {
                             >
                                 Maliyyə və Balans
                             </Button>
+                            {user?.role === 'Admin' && (
+                                <Button
+                                    view={activePage === 'customers' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('customers')}
+                                >
+                                    Müştərilər
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
@@ -260,6 +270,11 @@ function App() {
                                 {activePage === 'finance' && <FinancePage />}
                                 {activePage === 'warehouses' && <WarehouseAddressesModal user={user} />}
                                 {activePage === 'dashboard' && <Dashboard />}
+                                {activePage === 'customers' && (
+                                    user.role === 'Admin' ? <Customers /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
                             </>
                         ) : authMode === 'home' ? (
                             <Home
