@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, Text, TextInput, Button } from '@gravity-ui/uikit';
 import api from '../services/api';
 
-const Login = ({ onLoginSuccess, switchToRegister }) => {
+const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -66,6 +66,14 @@ const Login = ({ onLoginSuccess, switchToRegister }) => {
                             onChange={(e) => setPassword(e.target.value)}
                             size="l"
                         />
+                        <div style={{ textAlign: 'right', marginTop: '6px' }}>
+                            <span
+                                onClick={switchToForgotPassword}
+                                style={{ color: '#3b82f6', cursor: 'pointer', fontSize: '13px' }}
+                            >
+                                Şifrəni unutdum?
+                            </span>
+                        </div>
                     </div>
 
                     <Button view="action" size="xl" type="submit" loading={loading} style={{ marginTop: '8px' }}>

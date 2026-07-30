@@ -10,14 +10,18 @@ import Home from './pages/Home/Home';
 import Dashboard from './pages/Dashboard';
 import Packages from './pages/Packages';
 import Customers from './pages/Customers';
+import Reports from './pages/Reports';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import api from './services/api';
 
 function App() {
     const [user, setUser] = useState(null);
-    const [authMode, setAuthMode] = useState('home'); // 'home', 'login', 'register'
+    const [authMode, setAuthMode] = useState('home'); // 'home', 'login', 'register', 'forgot', 'reset'
+    const [resetToken, setResetToken] = useState(null);
 
     // Active Page state for Navigation
     const [activePage, setActivePage] = useState('home'); // 'home', 'packages', 'finance', 'warehouses', 'dashboard', 'customers', 'reports'
@@ -35,6 +39,13 @@ function App() {
     const [passMsg, setPassMsg] = useState({ text: '', type: '' });
     const [passLoading, setPassLoading] = useState(false);
 
+    // Profile Edit (name/email) state
+    const [profileFirstName, setProfileFirstName] = useState('');
+    const [profileLastName, setProfileLastName] = useState('');
+    const [profileEmail, setProfileEmail] = useState('');
+    const [profileMsg, setProfileMsg] = useState({ text: '', type: '' });
+    const [profileLoading, setProfileLoading] = useState(false);
+
     useEffect(() => {
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
@@ -44,7 +55,52 @@ function App() {
                 setUserBalance(parsed.balance);
             }
         }
+
+        const params = new URLSearchParams(window.location.search);
+        const tokenFromUrl = params.get('resetToken');
+        if (tokenFromUrl) {
+            setResetToken(tokenFromUrl);
+            setAuthMode('reset');
+            window.history.replaceState({}, '', window.location.pathname);
+        }
     }, []);
+
+    const openProfile = () => {
+        if (user) {
+            setProfileFirstName(user.firstName || '');
+            setProfileLastName(user.lastName || '');
+            setProfileEmail(user.email || '');
+            setProfileMsg({ text: '', type: '' });
+        }
+        setIsProfileOpen(true);
+    };
+
+    const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        setProfileMsg({ text: '', type: '' });
+
+        if (!profileFirstName || !profileLastName || !profileEmail) {
+            setProfileMsg({ text: 'Zəhmət olmasa bütün xanaları doldurun!', type: 'error' });
+            return;
+        }
+
+        setProfileLoading(true);
+        try {
+            const res = await api.put('/auth/profile', {
+                firstName: profileFirstName,
+                lastName: profileLastName,
+                email: profileEmail
+            });
+            const updatedUser = { ...user, ...res.data.user };
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setProfileMsg({ text: res.data.message || 'Profil yeniləndi!', type: 'success' });
+        } catch (err) {
+            setProfileMsg({ text: err.response?.data?.message || 'Profil yenilənərkən xəta baş verdi!', type: 'error' });
+        } finally {
+            setProfileLoading(false);
+        }
+    };
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -79,7 +135,7 @@ function App() {
             setUser(updated);
             localStorage.setItem('user', JSON.stringify(updated));
             try {
-                await api.post('/finance/top-up', { userId: user.id, amount: amountVal });
+                await api.post('/finance/top-up', { amount: amountVal });
             } catch (err) {
                 console.error("Backend top-up notification failed, updated locally:", err);
             }
@@ -98,7 +154,6 @@ function App() {
         setPassLoading(true);
         try {
             const res = await api.post('/auth/change-password', {
-                userId: user.id,
                 oldPassword,
                 newPassword
             });
@@ -131,7 +186,7 @@ function App() {
                         }}
                         onNavigateAuth={(mode) => setAuthMode(mode)}
                         onOpenPayment={() => setIsPaymentModalOpen(true)}
-                        onOpenProfile={() => setIsProfileOpen(true)}
+                        onOpenProfile={openProfile}
                         balance={userBalance}
                     />
                 ) : (
@@ -162,7 +217,7 @@ function App() {
                         </div>
 
                         <div
-                            onClick={() => setIsProfileOpen(true)}
+                            onClick={openProfile}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -242,13 +297,22 @@ function App() {
                                     Müştərilər
                                 </Button>
                             )}
+                            {user?.role === 'Admin' && (
+                                <Button
+                                    view={activePage === 'reports' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('reports')}
+                                >
+                                    Hesabatlar
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
                                     view="flat-secondary"
                                     width="max"
                                     style={{ justifyContent: 'flex-start' }}
-                                    onClick={() => setIsProfileOpen(true)}
+                                    onClick={openProfile}
                                 >
                                     <Icon data={Gear} style={{ marginRight: '8px' }} /> Profil Və Ayarlar
                                 </Button>
@@ -275,6 +339,11 @@ function App() {
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
+                                {activePage === 'reports' && (
+                                    user.role === 'Admin' ? <Reports /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
                             </>
                         ) : authMode === 'home' ? (
                             <Home
@@ -286,6 +355,16 @@ function App() {
                             <Login
                                 onLoginSuccess={onLoginSuccess}
                                 switchToRegister={() => setAuthMode('register')}
+                                switchToForgotPassword={() => setAuthMode('forgot')}
+                            />
+                        ) : authMode === 'forgot' ? (
+                            <ForgotPassword
+                                switchToLogin={() => setAuthMode('login')}
+                            />
+                        ) : authMode === 'reset' ? (
+                            <ResetPassword
+                                token={resetToken}
+                                switchToLogin={() => setAuthMode('login')}
                             />
                         ) : (
                             <Register
@@ -336,6 +415,53 @@ function App() {
                                     <Text style={{ color: '#56d364', fontWeight: 'bold' }}>Aktiv</Text>
                                 </div>
                             </Card>
+
+                            <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <Text variant="subheader-1">✏️ Profil Məlumatları</Text>
+
+                                {profileMsg.text && (
+                                    <div style={{
+                                        padding: '8px 12px',
+                                        borderRadius: '6px',
+                                        fontSize: '13px',
+                                        backgroundColor: profileMsg.type === 'error' ? '#3d1618' : '#13231b',
+                                        color: profileMsg.type === 'error' ? '#ff7b72' : '#56d364',
+                                        border: `1px solid ${profileMsg.type === 'error' ? '#f85149' : '#2ea043'}`
+                                    }}>
+                                        {profileMsg.text}
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <Text variant="caption-2" style={{ marginBottom: '4px', display: 'block' }}>Ad</Text>
+                                        <TextInput
+                                            value={profileFirstName}
+                                            onChange={(e) => setProfileFirstName(e.target.value)}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <Text variant="caption-2" style={{ marginBottom: '4px', display: 'block' }}>Soyad</Text>
+                                        <TextInput
+                                            value={profileLastName}
+                                            onChange={(e) => setProfileLastName(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Text variant="caption-2" style={{ marginBottom: '4px', display: 'block' }}>Email</Text>
+                                    <TextInput
+                                        type="email"
+                                        value={profileEmail}
+                                        onChange={(e) => setProfileEmail(e.target.value)}
+                                    />
+                                </div>
+
+                                <Button view="outlined" type="submit" loading={profileLoading} style={{ marginTop: '4px' }}>
+                                    Profili Yadda Saxla
+                                </Button>
+                            </form>
 
                             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <Text variant="subheader-1">🔐 Şifrəni Yenilə</Text>

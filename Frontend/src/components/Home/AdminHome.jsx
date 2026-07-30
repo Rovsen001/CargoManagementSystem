@@ -184,7 +184,7 @@ const AdminHome = ({ user, onNavigate }) => {
                         <Button size="l" view="flat-secondary" onClick={() => onNavigate && onNavigate('finance')}>
                             <Button.Icon><Wallet /></Button.Icon> Maliyyə Auditi
                         </Button>
-                        <Button size="l" view="flat-secondary" onClick={() => onNavigate && onNavigate('dashboard')}>
+                        <Button size="l" view="flat-secondary" onClick={() => onNavigate && onNavigate('reports')}>
                             <Button.Icon><ChartLine /></Button.Icon> Hesabatlar
                         </Button>
                     </div>

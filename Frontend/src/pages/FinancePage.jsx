@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Card, Text, Button, Label, Spin, Modal, Alert } from '@gravity-ui/uikit';
 import { Wallet, Plus, ShieldCheck, ArrowRight, Check } from '@gravity-ui/icons';
 import PaymentModal from '../components/Payment/PaymentModal';
+import api from '../services/api';
 
 const FinancePage = () => {
     const [balance, setBalance] = useState(0);
@@ -26,7 +26,7 @@ const FinancePage = () => {
     const fetchFinanceData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`http://localhost:5000/api/finance/my-balance?userId=${userId}`);
+            const response = await api.get(`/finance/my-balance`);
 
             setBalance(response.data.balance || 0);
             setTransactions(response.data.transactions || []);
@@ -39,10 +39,7 @@ const FinancePage = () => {
 
     const handleTopUpSuccess = async (amountVal) => {
         try {
-            await axios.post('http://localhost:5000/api/finance/top-up', {
-                userId: userId,
-                amount: amountVal
-            });
+            await api.post('/finance/top-up', { amount: amountVal });
 
             await fetchFinanceData();
 

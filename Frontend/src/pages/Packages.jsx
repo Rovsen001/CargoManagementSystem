@@ -165,7 +165,7 @@ const Packages = () => {
         <h2>${activeTab === 'active' ? 'Aktiv Bağlamalar' : 'Arxivdəki Bağlamalar'}</h2>
         <table>
           <thead>
-            <tr><th>ID</th><th>Trek Nömrəsi</th><th>Çəki (kq)</th><th>Qiymət ($)</th><th>Status</th></tr>
+            <tr><th>ID</th><th>Trek Nömrəsi</th><th>Çəki (kq)</th><th>Qiymət ($)</th><th>Status</th><th>Tarix</th></tr>
           </thead>
           <tbody>
             ${filteredPackages.map(pkg => `
@@ -175,6 +175,7 @@ const Packages = () => {
                 <td>${pkg.weight || ''}</td>
                 <td>${pkg.price || ''}</td>
                 <td>${pkg.status || ''}</td>
+                <td>${pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString('az-AZ') : ''}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -204,6 +205,11 @@ const Packages = () => {
         { id: 'weight', name: 'Çəki (kq)' },
         { id: 'price', name: 'Qiymət ($)' },
         { id: 'status', name: 'Status', template: (item) => renderStatusBadge(item.status) },
+        {
+            id: 'createdAt',
+            name: 'Tarix',
+            template: (item) => item.createdAt ? new Date(item.createdAt).toLocaleDateString('az-AZ') : '—'
+        },
         {
             id: 'actions',
             name: 'Əməliyyatlar',

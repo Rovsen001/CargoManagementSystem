@@ -4,6 +4,8 @@ const cors = require('cors');
 const sql = require('mssql');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -21,12 +23,55 @@ const config = {
         instanceName: process.env.DB_INSTANCE
     }
 };
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+    }
+});
+
 let pool;
 sql.connect(config).then(p => {
     pool = p;
     console.log("SQL Server-ə uğurla qoşuldu!");
 }).catch(err => console.error("SQL Qoşulma xətası:", err));
 
+// ==========================================
+// 🔒 AUTH MIDDLEWARE
+// ==========================================
+const INTERNAL_ROLES = ['Admin', 'Staff', 'Manager', 'Courier'];
+
+function verifyToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ message: 'Giriş tələb olunur' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ message: 'Sessiya etibarsızdır, yenidən daxil olun' });
+        }
+        req.user = decoded;
+        next();
+    });
+}
+
+function requireAdmin(req, res, next) {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Bu əməliyyat üçün icazəniz yoxdur' });
+    }
+    next();
+}
+
+function requireInternal(req, res, next) {
+    if (!INTERNAL_ROLES.includes(req.user.role)) {
+        return res.status(403).json({ message: 'Bu əməliyyat üçün icazəniz yoxdur' });
+    }
+    next();
+}
 
 // ==========================================
 // 🔐 AUTH (QEYDİYYAT VƏ GİRİŞ) MARŞRUTLARI
@@ -123,10 +168,11 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // 3. ŞİFRƏNİ DƏYİŞMƏK (CHANGE PASSWORD)
-app.post('/api/auth/change-password', async (req, res) => {
-    const { userId, oldPassword, newPassword } = req.body;
+app.post('/api/auth/change-password', verifyToken, async (req, res) => {
+    const userId = req.user.id;
+    const { oldPassword, newPassword } = req.body;
 
-    if (!userId || !oldPassword || !newPassword) {
+    if (!oldPassword || !newPassword) {
         return res.status(400).json({ message: "Bütün xanaları doldurun!" });
     }
 
@@ -154,6 +200,135 @@ app.post('/api/auth/change-password', async (req, res) => {
             .query('UPDATE Users SET password = @password WHERE id = @id');
 
         res.json({ message: "Şifrəniz uğurla yeniləndi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3.1 PROFİLİ YENİLƏ (AD, SOYAD, EMAIL)
+app.put('/api/auth/profile', verifyToken, async (req, res) => {
+    const userId = req.user.id;
+    const { firstName, lastName, email } = req.body;
+
+    if (!firstName || !lastName || !email) {
+        return res.status(400).json({ message: "Bütün xanaları doldurun!" });
+    }
+
+    try {
+        const emailCheck = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .input('id', sql.Int, userId)
+            .query('SELECT id FROM Users WHERE email = @email AND id != @id');
+
+        if (emailCheck.recordset.length > 0) {
+            return res.status(400).json({ message: "Bu email ünvanı artıq başqa hesab tərəfindən istifadə olunur!" });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, userId)
+            .input('firstName', sql.NVarChar, firstName)
+            .input('lastName', sql.NVarChar, lastName)
+            .input('fullName', sql.NVarChar, `${firstName} ${lastName}`)
+            .input('email', sql.NVarChar, email)
+            .query(`
+                UPDATE Users
+                SET firstName = @firstName, lastName = @lastName, fullName = @fullName, email = @email
+                WHERE id = @id
+            `);
+
+        res.json({
+            message: "Profiliniz uğurla yeniləndi!",
+            user: { id: userId, firstName, lastName, email, role: req.user.role }
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. ŞİFRƏNİ UNUTDUM (BƏRPA LİNKİ GÖNDƏR)
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ message: "Email daxil edin!" });
+    }
+
+    // Təhlükəsizlik üçün istifadəçi mövcud olsun-olmasın eyni mesaj qaytarılır
+    const genericResponse = { message: "Əgər bu email qeydiyyatdan keçibsə, bərpa linki göndərildi." };
+
+    try {
+        const result = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .query('SELECT id FROM Users WHERE email = @email');
+
+        if (result.recordset.length === 0) {
+            return res.json(genericResponse);
+        }
+
+        const userId = result.recordset[0].id;
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const expiry = new Date(Date.now() + 30 * 60 * 1000);
+
+        await pool.request()
+            .input('id', sql.Int, userId)
+            .input('token', sql.NVarChar, hashedToken)
+            .input('expiry', sql.DateTime, expiry)
+            .query('UPDATE Users SET resetToken = @token, resetTokenExpiry = @expiry WHERE id = @id');
+
+        const resetLink = `${process.env.FRONTEND_URL}?resetToken=${rawToken}`;
+
+        await transporter.sendMail({
+            from: `"CargoMS" <${process.env.SMTP_USER}>`,
+            to: email,
+            subject: 'CargoMS - Şifrə Bərpası',
+            html: `
+                <p>Şifrənizi bərpa etmək üçün aşağıdakı linkə klikləyin (link 30 dəqiqə etibarlıdır):</p>
+                <p><a href="${resetLink}">${resetLink}</a></p>
+                <p>Bu tələbi siz etməmisinizsə, bu emaili nəzərə almayın.</p>
+            `
+        });
+
+        res.json(genericResponse);
+    } catch (err) {
+        console.error("Şifrə bərpa xətası:", err);
+        res.status(500).json({ message: "Email göndərilərkən xəta baş verdi." });
+    }
+});
+
+// 5. ŞİFRƏNİ BƏRPA ET (YENİ ŞİFRƏ TƏYİN ET)
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+        return res.status(400).json({ message: "Bütün xanaları doldurun!" });
+    }
+
+    try {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        const result = await pool.request()
+            .input('token', sql.NVarChar, hashedToken)
+            .query('SELECT id, resetTokenExpiry FROM Users WHERE resetToken = @token');
+
+        if (result.recordset.length === 0) {
+            return res.status(400).json({ message: "Bərpa linki etibarsızdır." });
+        }
+
+        const user = result.recordset[0];
+        if (!user.resetTokenExpiry || new Date(user.resetTokenExpiry) < new Date()) {
+            return res.status(400).json({ message: "Bərpa linkinin vaxtı bitib. Yenidən tələb edin." });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await pool.request()
+            .input('id', sql.Int, user.id)
+            .input('password', sql.NVarChar, hashedPassword)
+            .query('UPDATE Users SET password = @password, resetToken = NULL, resetTokenExpiry = NULL WHERE id = @id');
+
+        res.json({ message: "Şifrəniz uğurla yeniləndi! İndi daxil ola bilərsiniz." });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -187,23 +362,20 @@ app.get('/api/public/track/:trackingNumber', async (req, res) => {
 // ==========================================
 
 // 1. Get Packages
-app.get('/api/packages', async (req, res) => {
+app.get('/api/packages', verifyToken, async (req, res) => {
     try {
         const isDeleted = req.query.archived === 'true' ? 1 : 0;
-        const userId = req.query.userId;
-        const role = req.query.role;
+        const isInternal = INTERNAL_ROLES.includes(req.user.role);
 
         let query = 'SELECT * FROM Packages WHERE isDeleted = @isDeleted';
-
-        if (role !== 'Admin' && userId) {
+        if (!isInternal) {
             query += ' AND userId = @userId';
         }
-
         query += ' ORDER BY id DESC';
 
         const request = pool.request().input('isDeleted', sql.Bit, isDeleted);
-        if (role !== 'Admin' && userId) {
-            request.input('userId', sql.Int, userId);
+        if (!isInternal) {
+            request.input('userId', sql.Int, req.user.id);
         }
 
         const result = await request.query(query);
@@ -214,17 +386,17 @@ app.get('/api/packages', async (req, res) => {
 });
 
 // 2. Add Package
-app.post('/api/packages', async (req, res) => {
-    const { trackingNumber, weight, price, userId } = req.body;
+app.post('/api/packages', verifyToken, async (req, res) => {
+    const { trackingNumber, weight, price } = req.body;
     try {
         await pool.request()
             .input('trackingNumber', sql.NVarChar, trackingNumber)
             .input('weight', sql.NVarChar, weight)
             .input('price', sql.NVarChar, price)
             .input('status', sql.NVarChar, 'Bəyan edildi')
-            .input('userId', sql.Int, userId || null)
+            .input('userId', sql.Int, req.user.id)
             .query(`
-        INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId) 
+        INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId)
         VALUES (@trackingNumber, @weight, @price, @status, 0, @userId)
       `);
         res.json({ message: "Bağlama əlavə edildi" });
@@ -234,21 +406,28 @@ app.post('/api/packages', async (req, res) => {
 });
 
 // 3. Update Package
-app.put('/api/packages/:id', async (req, res) => {
+app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { trackingNumber, weight, price, status } = req.body;
+    const isInternal = INTERNAL_ROLES.includes(req.user.role);
     try {
-        await pool.request()
+        const request = pool.request()
             .input('id', sql.Int, id)
             .input('trackingNumber', sql.NVarChar, trackingNumber)
             .input('weight', sql.NVarChar, weight)
             .input('price', sql.NVarChar, price)
-            .input('status', sql.NVarChar, status)
-            .query(`
-        UPDATE Packages 
-        SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status 
-        WHERE id = @id
-      `);
+            .input('status', sql.NVarChar, status);
+
+        let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status WHERE id = @id';
+        if (!isInternal) {
+            query += ' AND userId = @userId';
+            request.input('userId', sql.Int, req.user.id);
+        }
+
+        const result = await request.query(query);
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı və ya icazəniz yoxdur" });
+        }
         res.json({ message: "Bağlama yeniləndi" });
     } catch (err) {
         res.status(500).send(err.message);
@@ -256,20 +435,29 @@ app.put('/api/packages/:id', async (req, res) => {
 });
 
 // 4. Soft Delete
-app.delete('/api/packages/:id', async (req, res) => {
+app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
+    const isInternal = INTERNAL_ROLES.includes(req.user.role);
     try {
-        await pool.request()
-            .input('id', sql.Int, id)
-            .query('UPDATE Packages SET isDeleted = 1 WHERE id = @id');
+        const request = pool.request().input('id', sql.Int, id);
+        let query = 'UPDATE Packages SET isDeleted = 1 WHERE id = @id';
+        if (!isInternal) {
+            query += ' AND userId = @userId';
+            request.input('userId', sql.Int, req.user.id);
+        }
+
+        const result = await request.query(query);
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı və ya icazəniz yoxdur" });
+        }
         res.json({ message: "Bağlama arxivə atıldı" });
     } catch (err) {
         res.status(500).send(err.message);
     }
 });
 
-// 5. Restore
-app.put('/api/packages/:id/restore', async (req, res) => {
+// 5. Restore (Yalnız Admin)
+app.put('/api/packages/:id/restore', verifyToken, requireAdmin, async (req, res) => {
     const { id } = req.params;
     try {
         await pool.request()
@@ -281,8 +469,8 @@ app.put('/api/packages/:id/restore', async (req, res) => {
     }
 });
 
-// 6. Hard Delete
-app.delete('/api/packages/:id/hard', async (req, res) => {
+// 6. Hard Delete (Yalnız Admin)
+app.delete('/api/packages/:id/hard', verifyToken, requireAdmin, async (req, res) => {
     const { id } = req.params;
     try {
         await pool.request()
@@ -299,17 +487,11 @@ app.delete('/api/packages/:id/hard', async (req, res) => {
 // 📊 DASHBOARD VƏ USERS API MARŞRUTLARI
 // ==========================================
 
-// 1. Dashboard Statistika API-si
-app.get('/api/dashboard/stats', async (req, res) => {
-    const { userId, role } = req.query;
-
+// 1. Dashboard Statistika API-si (Yalnız daxili komanda üçün)
+app.get('/api/dashboard/stats', verifyToken, requireInternal, async (req, res) => {
     try {
-        let pkgQuery = 'SELECT status, weight, price FROM Packages WHERE isDeleted = 0';
-        let userQuery = 'SELECT COUNT(*) as totalUsers FROM Users';
-
-        if (role !== 'Admin' && userId) {
-            pkgQuery += ' AND userId = ' + parseInt(userId);
-        }
+        const pkgQuery = 'SELECT status, weight, price FROM Packages WHERE isDeleted = 0';
+        const userQuery = 'SELECT COUNT(*) as totalUsers FROM Users';
 
         const packagesResult = await pool.request().query(pkgQuery);
         const usersResult = await pool.request().query(userQuery);
@@ -337,7 +519,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 // 2. İstifadəçilərin Siyahısı (Yalnız Admin üçün)
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
     try {
         const result = await pool.request().query(`
       SELECT id, firstName, lastName, email, role, createdAt 
@@ -351,12 +533,16 @@ app.get('/api/users', async (req, res) => {
 });
 
 // 3. İstifadəçi Rolunu Dəyişmək (Yalnız Admin üçün)
-app.put('/api/users/:id/role', async (req, res) => {
+app.put('/api/users/:id/role', verifyToken, requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
     if (!role) {
         return res.status(400).json({ message: "Rol qeyd edilməlidir!" });
+    }
+
+    if (parseInt(id) === req.user.id) {
+        return res.status(400).json({ message: "Öz rolunuzu dəyişə bilməzsiniz" });
     }
 
     try {
@@ -371,8 +557,8 @@ app.put('/api/users/:id/role', async (req, res) => {
     }
 });
 
-// 4. Dashboard üçün Vizual Statistika API-si
-app.get('/api/packages/stats', async (req, res) => {
+// 4. Dashboard üçün Vizual Statistika API-si (Yalnız daxili komanda üçün)
+app.get('/api/packages/stats', verifyToken, requireInternal, async (req, res) => {
     try {
         const result = await pool.request().query(`
       SELECT status, COUNT(*) as count 
@@ -410,7 +596,7 @@ app.get('/api/packages/stats', async (req, res) => {
 // ==========================================
 
 // 0. Admin üçün Ümumi Gəlir Statistikası
-app.get('/api/finance/admin-summary', async (req, res) => {
+app.get('/api/finance/admin-summary', verifyToken, requireAdmin, async (req, res) => {
     try {
         const totalResult = await pool.request().query(`
             SELECT ISNULL(SUM(amount), 0) as totalRevenue
@@ -435,12 +621,8 @@ app.get('/api/finance/admin-summary', async (req, res) => {
 });
 
 // 1. Balans və Tranzaksiya Tarixçəsini Gətir
-app.get('/api/finance/my-balance', async (req, res) => {
-    const { userId } = req.query;
-
-    if (!userId) {
-        return res.status(400).json({ message: "İstifadəçi ID-si qeyd edilməyib!" });
-    }
+app.get('/api/finance/my-balance', verifyToken, async (req, res) => {
+    const userId = req.user.id;
 
     try {
         // Balansı çəkirik
@@ -464,10 +646,11 @@ app.get('/api/finance/my-balance', async (req, res) => {
 });
 
 // 2. Balans Artırmaq
-app.post('/api/finance/top-up', async (req, res) => {
-    const { userId, amount } = req.body;
+app.post('/api/finance/top-up', verifyToken, async (req, res) => {
+    const userId = req.user.id;
+    const { amount } = req.body;
 
-    if (!userId || !amount || amount <= 0) {
+    if (!amount || amount <= 0) {
         return res.status(400).json({ message: "Düzgün məlumatlar daxil edin" });
     }
 
@@ -491,6 +674,59 @@ app.post('/api/finance/top-up', async (req, res) => {
 
         res.json({ message: "Balans uğurla artırıldı!" });
 
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 📈 HESABATLAR API-si (Yalnız Admin üçün)
+// ==========================================
+
+app.get('/api/reports/summary', verifyToken, requireAdmin, async (req, res) => {
+    const { from, to } = req.query;
+
+    if (!from || !to) {
+        return res.status(400).json({ message: "Tarix aralığı (from, to) qeyd edilməlidir" });
+    }
+
+    try {
+        const toInclusive = new Date(to);
+        toInclusive.setDate(toInclusive.getDate() + 1);
+
+        const packagesResult = await pool.request()
+            .input('from', sql.DateTime, new Date(from))
+            .input('to', sql.DateTime, toInclusive)
+            .query(`
+                SELECT id, trackingNumber, weight, price, status, userId, createdAt
+                FROM Packages
+                WHERE isDeleted = 0 AND createdAt >= @from AND createdAt < @to
+                ORDER BY createdAt DESC
+            `);
+
+        const revenueResult = await pool.request()
+            .input('from', sql.DateTime, new Date(from))
+            .input('to', sql.DateTime, toInclusive)
+            .query(`
+                SELECT ISNULL(SUM(amount), 0) as totalRevenue
+                FROM transactions
+                WHERE type = 'inkam' AND created_at >= @from AND created_at < @to
+            `);
+
+        const packages = packagesResult.recordset;
+        const statusBreakdown = {
+            declared: packages.filter(p => p.status === 'Bəyan edildi').length,
+            onTheWay: packages.filter(p => p.status === 'Yoldadır').length,
+            customs: packages.filter(p => p.status === 'Gömrükdə').length,
+            arrived: packages.filter(p => p.status === 'Filialda' || p.status === 'Təhvil verildi').length
+        };
+
+        res.json({
+            totalPackages: packages.length,
+            totalRevenue: revenueResult.recordset[0].totalRevenue,
+            statusBreakdown,
+            packages
+        });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
