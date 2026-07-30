@@ -38,9 +38,8 @@ sql.connect(config).then(p => {
 }).catch(err => console.error("SQL Qoşulma xətası:", err));
 
 // ==========================================
-// 🔒 AUTH MIDDLEWARE
+// 🔒 AUTH VƏ İCAZƏ (RBAC) MIDDLEWARE
 // ==========================================
-const INTERNAL_ROLES = ['Admin', 'Staff', 'Manager', 'Courier'];
 
 function verifyToken(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -59,18 +58,58 @@ function verifyToken(req, res, next) {
     });
 }
 
-function requireAdmin(req, res, next) {
-    if (req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Bu əməliyyat üçün icazəniz yoxdur' });
+// Rolun DB-dəki cari icazələrini və Super Admin statusunu gətirir
+async function getRoleInfo(roleName) {
+    const roleResult = await pool.request()
+        .input('name', sql.NVarChar, roleName)
+        .query('SELECT id, isSuperAdmin FROM Roles WHERE name = @name');
+
+    if (roleResult.recordset.length === 0) {
+        return { isSuperAdmin: false, permissions: [] };
     }
-    next();
+
+    const role = roleResult.recordset[0];
+
+    const permsResult = await pool.request()
+        .input('roleId', sql.Int, role.id)
+        .query(`
+            SELECT p.[key] FROM RolePermissions rp
+            JOIN Permissions p ON p.id = rp.permissionId
+            WHERE rp.roleId = @roleId
+        `);
+
+    return {
+        isSuperAdmin: !!role.isSuperAdmin,
+        permissions: permsResult.recordset.map(r => r.key)
+    };
 }
 
-function requireInternal(req, res, next) {
-    if (!INTERNAL_ROLES.includes(req.user.role)) {
-        return res.status(403).json({ message: 'Bu əməliyyat üçün icazəniz yoxdur' });
+// Konkret bir icazə tələb edən marşrutlar üçün (Super Admin həmişə keçir)
+function requirePermission(key) {
+    return async (req, res, next) => {
+        try {
+            const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+            if (isSuperAdmin || permissions.includes(key)) {
+                return next();
+            }
+            return res.status(403).json({ message: 'Bu əməliyyat üçün icazəniz yoxdur' });
+        } catch (err) {
+            res.status(500).json({ message: err.message });
+        }
+    };
+}
+
+// Yalnız Super Admin üçün (rol idarəetməsi kimi checkbox-larla ötürülə bilməyən əməliyyatlar)
+async function requireSuperAdmin(req, res, next) {
+    try {
+        const { isSuperAdmin } = await getRoleInfo(req.user.role);
+        if (!isSuperAdmin) {
+            return res.status(403).json({ message: 'Bu əməliyyat yalnız Super Admin üçündür' });
+        }
+        next();
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-    next();
 }
 
 // ==========================================
@@ -144,6 +183,8 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(400).json({ message: "Email və ya şifrə yanlışdır!" });
         }
 
+        const { isSuperAdmin, permissions } = await getRoleInfo(user.role);
+
         const token = jwt.sign(
             { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
             JWT_SECRET,
@@ -159,7 +200,9 @@ app.post('/api/auth/login', async (req, res) => {
                 lastName: user.lastName,
                 email: user.email,
                 role: user.role,
-                balance: user.balance || 0 // Balansı da login zamanı frontendə göndəririk
+                balance: user.balance || 0, // Balansı da login zamanı frontendə göndəririk
+                isSuperAdmin,
+                permissions
             }
         });
     } catch (err) {
@@ -365,16 +408,17 @@ app.get('/api/public/track/:trackingNumber', async (req, res) => {
 app.get('/api/packages', verifyToken, async (req, res) => {
     try {
         const isDeleted = req.query.archived === 'true' ? 1 : 0;
-        const isInternal = INTERNAL_ROLES.includes(req.user.role);
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('packages.viewAll');
 
         let query = 'SELECT * FROM Packages WHERE isDeleted = @isDeleted';
-        if (!isInternal) {
+        if (!canViewAll) {
             query += ' AND userId = @userId';
         }
         query += ' ORDER BY id DESC';
 
         const request = pool.request().input('isDeleted', sql.Bit, isDeleted);
-        if (!isInternal) {
+        if (!canViewAll) {
             request.input('userId', sql.Int, req.user.id);
         }
 
@@ -409,7 +453,8 @@ app.post('/api/packages', verifyToken, async (req, res) => {
 app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { trackingNumber, weight, price, status } = req.body;
-    const isInternal = INTERNAL_ROLES.includes(req.user.role);
+    const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+    const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
     try {
         const request = pool.request()
             .input('id', sql.Int, id)
@@ -419,7 +464,7 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
             .input('status', sql.NVarChar, status);
 
         let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status WHERE id = @id';
-        if (!isInternal) {
+        if (!canEditAll) {
             query += ' AND userId = @userId';
             request.input('userId', sql.Int, req.user.id);
         }
@@ -437,11 +482,12 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
 // 4. Soft Delete
 app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
-    const isInternal = INTERNAL_ROLES.includes(req.user.role);
+    const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+    const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
     try {
         const request = pool.request().input('id', sql.Int, id);
         let query = 'UPDATE Packages SET isDeleted = 1 WHERE id = @id';
-        if (!isInternal) {
+        if (!canEditAll) {
             query += ' AND userId = @userId';
             request.input('userId', sql.Int, req.user.id);
         }
@@ -456,8 +502,8 @@ app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     }
 });
 
-// 5. Restore (Yalnız Admin)
-app.put('/api/packages/:id/restore', verifyToken, requireAdmin, async (req, res) => {
+// 5. Restore
+app.put('/api/packages/:id/restore', verifyToken, requirePermission('packages.restore'), async (req, res) => {
     const { id } = req.params;
     try {
         await pool.request()
@@ -469,8 +515,8 @@ app.put('/api/packages/:id/restore', verifyToken, requireAdmin, async (req, res)
     }
 });
 
-// 6. Hard Delete (Yalnız Admin)
-app.delete('/api/packages/:id/hard', verifyToken, requireAdmin, async (req, res) => {
+// 6. Hard Delete
+app.delete('/api/packages/:id/hard', verifyToken, requirePermission('packages.hardDelete'), async (req, res) => {
     const { id } = req.params;
     try {
         await pool.request()
@@ -487,8 +533,8 @@ app.delete('/api/packages/:id/hard', verifyToken, requireAdmin, async (req, res)
 // 📊 DASHBOARD VƏ USERS API MARŞRUTLARI
 // ==========================================
 
-// 1. Dashboard Statistika API-si (Yalnız daxili komanda üçün)
-app.get('/api/dashboard/stats', verifyToken, requireInternal, async (req, res) => {
+// 1. Dashboard Statistika API-si
+app.get('/api/dashboard/stats', verifyToken, requirePermission('dashboard.view'), async (req, res) => {
     try {
         const pkgQuery = 'SELECT status, weight, price FROM Packages WHERE isDeleted = 0';
         const userQuery = 'SELECT COUNT(*) as totalUsers FROM Users';
@@ -518,8 +564,22 @@ app.get('/api/dashboard/stats', verifyToken, requireInternal, async (req, res) =
     }
 });
 
-// 2. İstifadəçilərin Siyahısı (Yalnız Admin üçün)
-app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
+// 1.1 Rol Adlarının Sadə Siyahısı (istifadəçiyə rol təyin edərkən dropdown üçün)
+app.get('/api/roles/names', verifyToken, requirePermission('users.manageRoles'), async (req, res) => {
+    try {
+        const { isSuperAdmin } = await getRoleInfo(req.user.role);
+        const result = await pool.request().query('SELECT id, name, isSuperAdmin FROM Roles ORDER BY id');
+        const roles = isSuperAdmin
+            ? result.recordset
+            : result.recordset.filter(r => !r.isSuperAdmin);
+        res.json(roles);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. İstifadəçilərin Siyahısı
+app.get('/api/users', verifyToken, requirePermission('users.view'), async (req, res) => {
     try {
         const result = await pool.request().query(`
       SELECT id, firstName, lastName, email, role, createdAt 
@@ -532,8 +592,8 @@ app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
     }
 });
 
-// 3. İstifadəçi Rolunu Dəyişmək (Yalnız Admin üçün)
-app.put('/api/users/:id/role', verifyToken, requireAdmin, async (req, res) => {
+// 3. İstifadəçi Rolunu Dəyişmək
+app.put('/api/users/:id/role', verifyToken, requirePermission('users.manageRoles'), async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
@@ -546,6 +606,21 @@ app.put('/api/users/:id/role', verifyToken, requireAdmin, async (req, res) => {
     }
 
     try {
+        const targetRole = await pool.request()
+            .input('name', sql.NVarChar, role)
+            .query('SELECT isSuperAdmin FROM Roles WHERE name = @name');
+
+        if (targetRole.recordset.length === 0) {
+            return res.status(400).json({ message: "Belə bir rol mövcud deyil" });
+        }
+
+        if (targetRole.recordset[0].isSuperAdmin) {
+            const { isSuperAdmin: requesterIsSuperAdmin } = await getRoleInfo(req.user.role);
+            if (!requesterIsSuperAdmin) {
+                return res.status(403).json({ message: "Yalnız Super Admin başqasını Super Admin təyin edə bilər" });
+            }
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('role', sql.NVarChar, role)
@@ -557,8 +632,8 @@ app.put('/api/users/:id/role', verifyToken, requireAdmin, async (req, res) => {
     }
 });
 
-// 4. Dashboard üçün Vizual Statistika API-si (Yalnız daxili komanda üçün)
-app.get('/api/packages/stats', verifyToken, requireInternal, async (req, res) => {
+// 4. Dashboard üçün Vizual Statistika API-si
+app.get('/api/packages/stats', verifyToken, requirePermission('dashboard.view'), async (req, res) => {
     try {
         const result = await pool.request().query(`
       SELECT status, COUNT(*) as count 
@@ -596,7 +671,7 @@ app.get('/api/packages/stats', verifyToken, requireInternal, async (req, res) =>
 // ==========================================
 
 // 0. Admin üçün Ümumi Gəlir Statistikası
-app.get('/api/finance/admin-summary', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/finance/admin-summary', verifyToken, requirePermission('finance.viewRevenue'), async (req, res) => {
     try {
         const totalResult = await pool.request().query(`
             SELECT ISNULL(SUM(amount), 0) as totalRevenue
@@ -683,7 +758,7 @@ app.post('/api/finance/top-up', verifyToken, async (req, res) => {
 // 📈 HESABATLAR API-si (Yalnız Admin üçün)
 // ==========================================
 
-app.get('/api/reports/summary', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/reports/summary', verifyToken, requirePermission('reports.view'), async (req, res) => {
     const { from, to } = req.query;
 
     if (!from || !to) {
@@ -727,6 +802,189 @@ app.get('/api/reports/summary', verifyToken, requireAdmin, async (req, res) => {
             statusBreakdown,
             packages
         });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🛡️ ROLLAR VƏ İCAZƏLƏR (Yalnız Super Admin üçün)
+// ==========================================
+
+// 1. Bütün icazə açarlarının siyahısı (checkbox UI üçün)
+app.get('/api/permissions', verifyToken, requireSuperAdmin, async (req, res) => {
+    try {
+        const result = await pool.request().query('SELECT id, [key], label, category FROM Permissions ORDER BY category, id');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Rolların siyahısı (hər birinin icazələri və istifadəçi sayı ilə)
+app.get('/api/roles', verifyToken, requireSuperAdmin, async (req, res) => {
+    try {
+        const roles = await pool.request().query('SELECT id, name, isSuperAdmin, createdAt FROM Roles ORDER BY id');
+
+        const permsResult = await pool.request().query(`
+            SELECT rp.roleId, p.[key] FROM RolePermissions rp
+            JOIN Permissions p ON p.id = rp.permissionId
+        `);
+
+        const userCounts = await pool.request().query(`
+            SELECT role, COUNT(*) as count FROM Users GROUP BY role
+        `);
+
+        const data = roles.recordset.map(role => ({
+            ...role,
+            permissions: permsResult.recordset.filter(p => p.roleId === role.id).map(p => p.key),
+            userCount: (userCounts.recordset.find(u => u.role === role.name) || { count: 0 }).count
+        }));
+
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Yeni Rol Yarat
+app.post('/api/roles', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { name, permissionKeys } = req.body;
+
+    if (!name || !name.trim()) {
+        return res.status(400).json({ message: "Rol adı qeyd edilməlidir!" });
+    }
+
+    try {
+        const existing = await pool.request()
+            .input('name', sql.NVarChar, name.trim())
+            .query('SELECT id FROM Roles WHERE name = @name');
+
+        if (existing.recordset.length > 0) {
+            return res.status(400).json({ message: "Bu adda rol artıq mövcuddur!" });
+        }
+
+        const insertResult = await pool.request()
+            .input('name', sql.NVarChar, name.trim())
+            .query('INSERT INTO Roles (name, isSuperAdmin) OUTPUT INSERTED.id VALUES (@name, 0)');
+
+        const roleId = insertResult.recordset[0].id;
+
+        for (const key of (permissionKeys || [])) {
+            const perm = await pool.request()
+                .input('key', sql.NVarChar, key)
+                .query('SELECT id FROM Permissions WHERE [key] = @key');
+            if (perm.recordset.length > 0) {
+                await pool.request()
+                    .input('roleId', sql.Int, roleId)
+                    .input('permissionId', sql.Int, perm.recordset[0].id)
+                    .query('INSERT INTO RolePermissions (roleId, permissionId) VALUES (@roleId, @permissionId)');
+            }
+        }
+
+        res.status(201).json({ message: "Rol uğurla yaradıldı!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Rolu Yenilə (ad + icazələr)
+app.put('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { name, permissionKeys } = req.body;
+
+    try {
+        const roleResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT name, isSuperAdmin FROM Roles WHERE id = @id');
+
+        if (roleResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Rol tapılmadı" });
+        }
+
+        const role = roleResult.recordset[0];
+
+        if (role.isSuperAdmin) {
+            return res.status(400).json({ message: "Super Admin rolu redaktə edilə bilməz" });
+        }
+
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: "Rol adı qeyd edilməlidir!" });
+        }
+
+        const duplicateCheck = await pool.request()
+            .input('name', sql.NVarChar, name.trim())
+            .input('id', sql.Int, id)
+            .query('SELECT id FROM Roles WHERE name = @name AND id != @id');
+
+        if (duplicateCheck.recordset.length > 0) {
+            return res.status(400).json({ message: "Bu adda rol artıq mövcuddur!" });
+        }
+
+        // Ad dəyişibsə, bu rola təyin edilmiş istifadəçilərin də adını yeniləyirik
+        if (name.trim() !== role.name) {
+            await pool.request()
+                .input('oldName', sql.NVarChar, role.name)
+                .input('newName', sql.NVarChar, name.trim())
+                .query('UPDATE Users SET role = @newName WHERE role = @oldName');
+        }
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('name', sql.NVarChar, name.trim())
+            .query('UPDATE Roles SET name = @name WHERE id = @id');
+
+        await pool.request()
+            .input('roleId', sql.Int, id)
+            .query('DELETE FROM RolePermissions WHERE roleId = @roleId');
+
+        for (const key of (permissionKeys || [])) {
+            const perm = await pool.request()
+                .input('key', sql.NVarChar, key)
+                .query('SELECT id FROM Permissions WHERE [key] = @key');
+            if (perm.recordset.length > 0) {
+                await pool.request()
+                    .input('roleId', sql.Int, id)
+                    .input('permissionId', sql.Int, perm.recordset[0].id)
+                    .query('INSERT INTO RolePermissions (roleId, permissionId) VALUES (@roleId, @permissionId)');
+            }
+        }
+
+        res.json({ message: "Rol uğurla yeniləndi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Rolu Sil
+app.delete('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const roleResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT name, isSuperAdmin FROM Roles WHERE id = @id');
+
+        if (roleResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Rol tapılmadı" });
+        }
+
+        const role = roleResult.recordset[0];
+
+        if (role.isSuperAdmin) {
+            return res.status(400).json({ message: "Super Admin rolu silinə bilməz" });
+        }
+
+        const usersWithRole = await pool.request()
+            .input('name', sql.NVarChar, role.name)
+            .query('SELECT COUNT(*) as count FROM Users WHERE role = @name');
+
+        if (usersWithRole.recordset[0].count > 0) {
+            return res.status(400).json({ message: `Bu rol ${usersWithRole.recordset[0].count} istifadəçiyə təyin edilib, əvvəlcə onların rolunu dəyişin` });
+        }
+
+        await pool.request().input('id', sql.Int, id).query('DELETE FROM Roles WHERE id = @id');
+        res.json({ message: "Rol uğurla silindi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

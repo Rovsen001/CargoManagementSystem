@@ -81,16 +81,17 @@ const Home = ({ user, onNavigate, onNavigateLogin, onNavigateRegister }) => {
         );
     }
 
-    // 2. İSTİFADƏÇİ GİRİŞ EDİBSƏ — ROLUNA UĞUN KARSILAMA EKRANI
+    // 2. İSTİFADƏÇİ GİRİŞ EDİBSƏ — İCAZƏSİNƏ UYĞUN QARŞILAMA EKRANI
+    const hasElevatedAccess = user.isSuperAdmin || (user.permissions && user.permissions.length > 0);
+    const hasAdminAccess = user.isSuperAdmin || user.permissions?.includes('users.view');
+
     return (
         <main style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '40px' }}>
-            {user.role === 'Admin' && <AdminHome user={user} onNavigate={onNavigate} />}
-            {user.role === 'Customer' && <CustomerHome user={user} onNavigate={onNavigate} />}
-            {(user.role === 'Manager' || user.role === 'Staff' || user.role === 'Courier') && (
+            {hasAdminAccess ? (
+                <AdminHome user={user} onNavigate={onNavigate} />
+            ) : hasElevatedAccess ? (
                 <StaffHome user={user} onNavigate={onNavigate} />
-            )}
-            {/* Rollar arasında fərqli bir rol olarsa fallback olaraq CustomerHome istifadə edirik */}
-            {user.role !== 'Admin' && user.role !== 'Customer' && user.role !== 'Manager' && user.role !== 'Staff' && user.role !== 'Courier' && (
+            ) : (
                 <CustomerHome user={user} onNavigate={onNavigate} />
             )}
         </main>

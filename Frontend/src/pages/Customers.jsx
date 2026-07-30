@@ -3,22 +3,25 @@ import { Table, Text, Card, Loader, Select, Label, TextInput, Icon } from '@grav
 import { Magnifier } from '@gravity-ui/icons';
 import api from '../services/api';
 
-const ROLES = ['Customer', 'Staff', 'Manager', 'Courier', 'Admin'];
-
 const Customers = () => {
     const currentUser = JSON.parse(localStorage.getItem('user')) || {};
     const [users, setUsers] = useState([]);
+    const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [updatingId, setUpdatingId] = useState(null);
 
-    const fetchUsers = async () => {
+    const fetchData = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/users');
-            setUsers(Array.isArray(response.data) ? response.data : []);
+            const [usersRes, rolesRes] = await Promise.all([
+                api.get('/users'),
+                api.get('/roles/names')
+            ]);
+            setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+            setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
         } catch (error) {
-            console.error("İstifadəçilər çəkilərkən xəta:", error);
+            console.error("Məlumatlar çəkilərkən xəta:", error);
             setUsers([]);
         } finally {
             setLoading(false);
@@ -26,7 +29,7 @@ const Customers = () => {
     };
 
     useEffect(() => {
-        fetchUsers();
+        fetchData();
     }, []);
 
     const handleRoleChange = async (userId, newRole) => {
@@ -48,7 +51,7 @@ const Customers = () => {
         return fullName.includes(q) || (u.email || '').toLowerCase().includes(q);
     });
 
-    const roleTheme = { Admin: 'warning', Staff: 'success', Manager: 'success', Courier: 'success', Customer: 'info' };
+    const roleTheme = { Admin: 'warning', 'Super Admin': 'warning', Staff: 'success', Manager: 'success', Courier: 'success', Customer: 'info' };
 
     const columns = [
         { id: 'id', name: 'ID', meta: { width: '60px' } },
@@ -79,10 +82,10 @@ const Customers = () => {
                 <Select
                     value={[item.role]}
                     onUpdate={(val) => handleRoleChange(item.id, val[0])}
-                    options={ROLES.map((r) => ({ value: r, content: r }))}
+                    options={roles.map((r) => ({ value: r.name, content: r.name }))}
                     size="s"
                     disabled={updatingId === item.id || item.id === currentUser.id}
-                    width="150px"
+                    width="180px"
                 />
             )
         }

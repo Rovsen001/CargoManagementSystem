@@ -26,7 +26,11 @@ import api from '../services/api';
 const Packages = () => {
     // Daxil olan istifadəçini localStroage-dən götürürük
     const currentUser = JSON.parse(localStorage.getItem('user')) || {};
-    const isAdmin = currentUser.role === 'Admin';
+    const hasPermission = (key) => Boolean(currentUser.isSuperAdmin || currentUser.permissions?.includes(key));
+    const canViewAll = hasPermission('packages.viewAll');
+    const canChangeStatus = hasPermission('packages.changeStatus');
+    const canRestore = hasPermission('packages.restore');
+    const canHardDelete = hasPermission('packages.hardDelete');
 
     const [packages, setPackages] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -217,8 +221,8 @@ const Packages = () => {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {activeTab === 'active' ? (
                         <>
-                            {/* STATUS SELECT - Yalnız Adminlər üçün */}
-                            {isAdmin && (
+                            {/* STATUS SELECT - Yalnız icazəsi olanlar üçün */}
+                            {canChangeStatus && (
                                 <Select
                                     value={[item.status || 'Bəyan edildi']}
                                     onUpdate={(val) => handleStatusChange(item.id, val[0], item)}
@@ -240,16 +244,16 @@ const Packages = () => {
                         </>
                     ) : (
                         <>
-                            {/* Bərpa və Tam silmə - Yalnız Admin üçün */}
-                            {isAdmin && (
-                                <>
-                                    <Button view="action" size="s" onClick={() => handleRestore(item.id)}>
-                                        <Icon data={ArrowRotateLeft} /> Bərpa Et
-                                    </Button>
-                                    <Button view="flat-danger" size="s" onClick={() => handleHardDelete(item.id)}>
-                                        <Icon data={Xmark} />
-                                    </Button>
-                                </>
+                            {/* Bərpa və Tam silmə - icazəyə görə ayrı-ayrı */}
+                            {canRestore && (
+                                <Button view="action" size="s" onClick={() => handleRestore(item.id)}>
+                                    <Icon data={ArrowRotateLeft} /> Bərpa Et
+                                </Button>
+                            )}
+                            {canHardDelete && (
+                                <Button view="flat-danger" size="s" onClick={() => handleHardDelete(item.id)}>
+                                    <Icon data={Xmark} />
+                                </Button>
                             )}
                         </>
                     )}
@@ -264,10 +268,10 @@ const Packages = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <Text variant="header-2">
-                        {isAdmin ? "📦 Bütün Bağlamalar (Admin Panel)" : "📦 Mənim Bağlamalarım"}
+                        {canViewAll ? "📦 Bütün Bağlamalar" : "📦 Mənim Bağlamalarım"}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                        {isAdmin ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
+                        {canViewAll ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
                     </Text>
                 </div>
 
@@ -391,7 +395,7 @@ const Packages = () => {
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
                         <TextInput value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
                     </div>
-                    {isAdmin && (
+                    {canChangeStatus && (
                         <div>
                             <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Status</Text>
                             <Select

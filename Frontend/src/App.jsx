@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard';
 import Packages from './pages/Packages';
 import Customers from './pages/Customers';
 import Reports from './pages/Reports';
+import Roles from './pages/Roles';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -167,8 +168,13 @@ function App() {
         }
     };
 
-    // Check if the current user is an Admin or Staff requiring internal backoffice sidebar
-    const isAdminOrStaff = user && (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Staff' || user.role === 'Courier');
+    // İcazə əsaslı yoxlamalar (rol adı deyil, DB-dən gələn permissions massivinə görə)
+    const hasPermission = (key) => Boolean(user?.isSuperAdmin || user?.permissions?.includes(key));
+    const isSuperAdminUser = Boolean(user?.isSuperAdmin);
+    const hasAdminAccess = isSuperAdminUser || hasPermission('users.view');
+
+    // Ən azı bir yüksəldilmiş icazəsi olan istifadəçilər üçün backoffice interfeysi
+    const isAdminOrStaff = user && (isSuperAdminUser || (user.permissions && user.permissions.length > 0));
 
     return (
         <ThemeProvider theme="dark">
@@ -288,7 +294,7 @@ function App() {
                             >
                                 Maliyyə və Balans
                             </Button>
-                            {user?.role === 'Admin' && (
+                            {hasPermission('users.view') && (
                                 <Button
                                     view={activePage === 'customers' ? 'action' : 'flat-secondary'}
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
@@ -297,13 +303,22 @@ function App() {
                                     Müştərilər
                                 </Button>
                             )}
-                            {user?.role === 'Admin' && (
+                            {hasPermission('reports.view') && (
                                 <Button
                                     view={activePage === 'reports' ? 'action' : 'flat-secondary'}
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('reports')}
                                 >
                                     Hesabatlar
+                                </Button>
+                            )}
+                            {isSuperAdminUser && (
+                                <Button
+                                    view={activePage === 'roles' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('roles')}
+                                >
+                                    Rollar
                                 </Button>
                             )}
 
@@ -335,12 +350,17 @@ function App() {
                                 {activePage === 'warehouses' && <WarehouseAddressesModal user={user} />}
                                 {activePage === 'dashboard' && <Dashboard />}
                                 {activePage === 'customers' && (
-                                    user.role === 'Admin' ? <Customers /> : (
+                                    hasPermission('users.view') ? <Customers /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
                                 {activePage === 'reports' && (
-                                    user.role === 'Admin' ? <Reports /> : (
+                                    hasPermission('reports.view') ? <Reports /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'roles' && (
+                                    isSuperAdminUser ? <Roles /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
@@ -393,14 +413,14 @@ function App() {
                     <Modal open={isProfileOpen} onClose={() => setIsProfileOpen(false)}>
                         <div style={{ padding: '28px', width: '450px', backgroundColor: '#161b22', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid #30363d', paddingBottom: '16px' }}>
-                                <Avatar text={getUserInitials()} size="xl" theme={user.role === 'Admin' ? 'warning' : 'normal'} />
+                                <Avatar text={getUserInitials()} size="xl" theme={hasAdminAccess ? 'warning' : 'normal'} />
                                 <div>
                                     <Text variant="header-2" style={{ color: '#ffffff' }}>
                                         {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
                                     </Text>
                                     <Text variant="body-1" color="secondary" style={{ display: 'block' }}>{user.email}</Text>
                                     <div style={{ marginTop: '6px' }}>
-                                        <Label theme={user.role === 'Admin' ? 'warning' : 'info'}>{user.role} Hesabı</Label>
+                                        <Label theme={hasAdminAccess ? 'warning' : 'info'}>{user.role} Hesabı</Label>
                                     </div>
                                 </div>
                             </div>
