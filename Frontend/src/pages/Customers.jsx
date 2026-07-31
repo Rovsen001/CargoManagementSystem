@@ -94,7 +94,7 @@ const Customers = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-                <Text variant="header-2">👥 Müştəri və İstifadəçi Siyahısı</Text>
+                <Text variant="header-2">Müştəri və İstifadəçi Siyahısı</Text>
                 <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                     Sistemdəki bütün istifadəçiləri idarə edin və rollarını dəyişdirin.
                 </Text>

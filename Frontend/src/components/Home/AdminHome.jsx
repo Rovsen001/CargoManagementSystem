@@ -82,7 +82,7 @@ const AdminHome = ({ user, onNavigate }) => {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <Text variant="header-2" style={{ color: '#ffffff' }}>
-                                Sistem İdarəetmə Paneli — {user.firstName || user.fullName || 'Admin'} 🛡️
+                                Sistem İdarəetmə Paneli — {user.firstName || user.fullName || 'Admin'}
                             </Text>
                             <Label theme="warning" size="m">Administrator</Label>
                         </div>

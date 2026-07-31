@@ -33,7 +33,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
             <Card style={{ width: '380px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 <div>
-                    <Text variant="header-2">Xoş gəlmisiniz 👋</Text>
+                    <Text variant="header-2">Xoş gəlmisiniz</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
                         Davam etmək üçün hesabınıza daxil olun.
                     </Text>

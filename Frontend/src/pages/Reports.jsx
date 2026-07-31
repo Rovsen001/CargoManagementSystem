@@ -17,6 +17,12 @@ const Reports = () => {
     const [error, setError] = useState('');
 
     const fetchReport = async () => {
+        if (from > to) {
+            setError('Başlanğıc tarix son tarixdən sonra ola bilməz.');
+            setData(null);
+            return;
+        }
+
         setLoading(true);
         setError('');
         try {
@@ -112,7 +118,7 @@ const Reports = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-                <Text variant="header-2">📈 Hesabatlar</Text>
+                <Text variant="header-2">Hesabatlar</Text>
                 <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                     Tarix aralığına görə bağlama və gəlir hesabatlarına baxın, Excel formatında export edin.
                 </Text>

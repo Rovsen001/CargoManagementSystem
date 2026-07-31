@@ -63,7 +63,7 @@ const StaffHome = ({ user, onNavigate }) => {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <Text variant="header-2" style={{ color: '#ffffff' }}>
-                                Anbar və Əməliyyat Paneli — {user.firstName || user.fullName || 'Personal'} 📦
+                                Anbar və Əməliyyat Paneli — {user.firstName || user.fullName || 'Personal'}
                             </Text>
                             <Label theme="success" size="m">{user.role || 'Personal'}</Label>
                         </div>

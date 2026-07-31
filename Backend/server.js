@@ -99,6 +99,12 @@ function requirePermission(key) {
     };
 }
 
+// Çəki/Qiymət kimi sərbəst mətn sahələrində "-" işarəsi olub-olmadığını yoxlayır
+// (valyuta/vahid simvolu ilə rəqəm arasında ola biləcəyi üçün bitişiklik axtarmırıq)
+function hasNegativeNumber(value) {
+    return /-/.test(String(value ?? ''));
+}
+
 // Yalnız Super Admin üçün (rol idarəetməsi kimi checkbox-larla ötürülə bilməyən əməliyyatlar)
 async function requireSuperAdmin(req, res, next) {
     try {
@@ -118,10 +124,17 @@ async function requireSuperAdmin(req, res, next) {
 
 // 1. QEYDİYYAT (REGISTER)
 app.post('/api/auth/register', async (req, res) => {
-    const { firstName, lastName, email, password, confirmPassword } = req.body;
+    let { firstName, lastName, email, password, confirmPassword } = req.body;
+    firstName = firstName?.trim();
+    lastName = lastName?.trim();
+    email = email?.trim();
 
     if (!firstName || !lastName || !email || !password || !confirmPassword) {
         return res.status(400).json({ message: "Zəhmət olmasa bütün xanaları doldurun!" });
+    }
+
+    if (password.length < 6) {
+        return res.status(400).json({ message: "Şifrə ən azı 6 simvoldan ibarət olmalıdır!" });
     }
 
     if (password !== confirmPassword) {
@@ -219,6 +232,10 @@ app.post('/api/auth/change-password', verifyToken, async (req, res) => {
         return res.status(400).json({ message: "Bütün xanaları doldurun!" });
     }
 
+    if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Yeni şifrə ən azı 6 simvoldan ibarət olmalıdır!" });
+    }
+
     try {
         const result = await pool.request()
             .input('id', sql.Int, userId)
@@ -251,7 +268,9 @@ app.post('/api/auth/change-password', verifyToken, async (req, res) => {
 // 3.1 PROFİLİ YENİLƏ (AD, SOYAD, EMAIL)
 app.put('/api/auth/profile', verifyToken, async (req, res) => {
     const userId = req.user.id;
-    const { firstName, lastName, email } = req.body;
+    const firstName = req.body.firstName?.trim();
+    const lastName = req.body.lastName?.trim();
+    const email = req.body.email?.trim();
 
     if (!firstName || !lastName || !email) {
         return res.status(400).json({ message: "Bütün xanaları doldurun!" });
@@ -347,6 +366,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
         return res.status(400).json({ message: "Bütün xanaları doldurun!" });
     }
 
+    if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Şifrə ən azı 6 simvoldan ibarət olmalıdır!" });
+    }
+
     try {
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -432,6 +455,17 @@ app.get('/api/packages', verifyToken, async (req, res) => {
 // 2. Add Package
 app.post('/api/packages', verifyToken, async (req, res) => {
     const { trackingNumber, weight, price } = req.body;
+
+    if (!trackingNumber || !trackingNumber.trim()) {
+        return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
+    }
+    if (hasNegativeNumber(weight)) {
+        return res.status(400).json({ message: "Çəki mənfi ola bilməz!" });
+    }
+    if (hasNegativeNumber(price)) {
+        return res.status(400).json({ message: "Qiymət mənfi ola bilməz!" });
+    }
+
     try {
         await pool.request()
             .input('trackingNumber', sql.NVarChar, trackingNumber)
@@ -453,6 +487,17 @@ app.post('/api/packages', verifyToken, async (req, res) => {
 app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { trackingNumber, weight, price, status } = req.body;
+
+    if (!trackingNumber || !trackingNumber.trim()) {
+        return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
+    }
+    if (hasNegativeNumber(weight)) {
+        return res.status(400).json({ message: "Çəki mənfi ola bilməz!" });
+    }
+    if (hasNegativeNumber(price)) {
+        return res.status(400).json({ message: "Qiymət mənfi ola bilməz!" });
+    }
+
     const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
     const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
     try {
@@ -723,9 +768,9 @@ app.get('/api/finance/my-balance', verifyToken, async (req, res) => {
 // 2. Balans Artırmaq
 app.post('/api/finance/top-up', verifyToken, async (req, res) => {
     const userId = req.user.id;
-    const { amount } = req.body;
+    const amount = parseFloat(req.body.amount);
 
-    if (!amount || amount <= 0) {
+    if (!amount || isNaN(amount) || amount <= 0) {
         return res.status(400).json({ message: "Düzgün məlumatlar daxil edin" });
     }
 
@@ -763,6 +808,10 @@ app.get('/api/reports/summary', verifyToken, requirePermission('reports.view'), 
 
     if (!from || !to) {
         return res.status(400).json({ message: "Tarix aralığı (from, to) qeyd edilməlidir" });
+    }
+
+    if (new Date(from) > new Date(to)) {
+        return res.status(400).json({ message: "Başlanğıc tarix son tarixdən sonra ola bilməz" });
     }
 
     try {

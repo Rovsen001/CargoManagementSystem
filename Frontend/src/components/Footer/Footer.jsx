@@ -66,13 +66,13 @@ const Footer = ({ onNavigate }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>Əlaqə & Filial</Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px' }}>
-                        📞 <strong>*0011</strong> / +994 (12) 490-00-11
+                        <strong>*0011</strong> / +994 (12) 490-00-11
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px' }}>
-                        ✉️ support@cargoms.az
+                        support@cargoms.az
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px' }}>
-                        📍 Bakı şəhəri, Nəsimi r-nu, Nizami küç. 142
+                        Bakı şəhəri, Nəsimi r-nu, Nizami küç. 142
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px' }}>
                         İş saatları: B.e - Şənbə: 09:00 - 20:00

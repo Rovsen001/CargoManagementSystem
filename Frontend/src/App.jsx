@@ -80,7 +80,7 @@ function App() {
         e.preventDefault();
         setProfileMsg({ text: '', type: '' });
 
-        if (!profileFirstName || !profileLastName || !profileEmail) {
+        if (!profileFirstName.trim() || !profileLastName.trim() || !profileEmail.trim()) {
             setProfileMsg({ text: 'Zəhmət olmasa bütün xanaları doldurun!', type: 'error' });
             return;
         }
@@ -88,9 +88,9 @@ function App() {
         setProfileLoading(true);
         try {
             const res = await api.put('/auth/profile', {
-                firstName: profileFirstName,
-                lastName: profileLastName,
-                email: profileEmail
+                firstName: profileFirstName.trim(),
+                lastName: profileLastName.trim(),
+                email: profileEmail.trim()
             });
             const updatedUser = { ...user, ...res.data.user };
             setUser(updatedUser);
@@ -149,6 +149,11 @@ function App() {
 
         if (!oldPassword || !newPassword) {
             setPassMsg({ text: 'Zəhmət olmasa bütün xanaları doldurun!', type: 'error' });
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPassMsg({ text: 'Yeni şifrə ən azı 6 simvoldan ibarət olmalıdır!', type: 'error' });
             return;
         }
 
@@ -242,11 +247,11 @@ function App() {
                                 size="m"
                                 theme="warning"
                             />
-                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '4px' }}>
                                 <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
                                     {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
                                 </Text>
-                                <Label size="s" theme="warning">{user.role}</Label>
+                                <Label size="xs" theme="warning">{user.role}</Label>
                             </div>
                         </div>
                     </header>
@@ -437,7 +442,7 @@ function App() {
                             </Card>
 
                             <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <Text variant="subheader-1">✏️ Profil Məlumatları</Text>
+                                <Text variant="subheader-1">Profil Məlumatları</Text>
 
                                 {profileMsg.text && (
                                     <div style={{
@@ -484,7 +489,7 @@ function App() {
                             </form>
 
                             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <Text variant="subheader-1">🔐 Şifrəni Yenilə</Text>
+                                <Text variant="subheader-1">Şifrəni Yenilə</Text>
 
                                 {passMsg.text && (
                                     <div style={{

@@ -19,6 +19,16 @@ const Register = ({ switchToLogin }) => {
         setSuccessMsg('');
 
         // Frontend tərəfində ilk yoxlama
+        if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+            setError('Zəhmət olmasa bütün xanaları doldurun!');
+            return;
+        }
+
+        if (password.length < 6) {
+            setError('Şifrə ən azı 6 simvoldan ibarət olmalıdır!');
+            return;
+        }
+
         if (password !== confirmPassword) {
             setError('Şifrələr bir-biri ilə üst-üstə düşmür!');
             return;
@@ -28,9 +38,9 @@ const Register = ({ switchToLogin }) => {
 
         try {
             await api.post('/auth/register', {
-                firstName,
-                lastName,
-                email,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                email: email.trim(),
                 password,
                 confirmPassword
             });
@@ -52,7 +62,7 @@ const Register = ({ switchToLogin }) => {
             <Card style={{ width: '440px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 <div>
-                    <Text variant="header-2">Hesab Yarat 🚀</Text>
+                    <Text variant="header-2">Hesab Yarat</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
                         CargoMS sisteminə qoşulmaq üçün məlumatlarınızı daxil edin.
                     </Text>

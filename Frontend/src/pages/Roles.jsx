@@ -118,7 +118,7 @@ const Roles = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                    <Text variant="header-2">🛡️ Rollar və İcazələr</Text>
+                    <Text variant="header-2">Rollar və İcazələr</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                         Sistemdəki rolları idarə edin, yeni rol yaradın və hər birinə icazələr təyin edin.
                     </Text>

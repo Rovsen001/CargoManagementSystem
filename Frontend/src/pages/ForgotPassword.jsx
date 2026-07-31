@@ -27,7 +27,7 @@ const ForgotPassword = ({ switchToLogin }) => {
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
             <Card style={{ width: '380px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
-                    <Text variant="header-2">Şifrəni Unutdum 🔑</Text>
+                    <Text variant="header-2">Şifrəni Unutdum</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
                         Qeydiyyatdan keçdiyiniz email ünvanını daxil edin, bərpa linki göndərəcəyik.
                     </Text>

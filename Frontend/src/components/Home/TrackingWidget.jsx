@@ -43,7 +43,7 @@ const TrackingWidget = () => {
         >
             <div>
                 <div style={{ marginBottom: '16px' }}>
-                    <Text variant="header-2" style={{ color: '#ffffff' }}>🔍 Bağlamanı İzləyin</Text>
+                    <Text variant="header-2" style={{ color: '#ffffff' }}>Bağlamanı İzləyin</Text>
                     <Text variant="body-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                         Real vaxt rejimində bağlamanızın harada olduğunu öyrənin
                     </Text>

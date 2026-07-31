@@ -21,7 +21,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div>
                         <Label theme="info" size="m" style={{ marginBottom: '12px' }}>
-                            🚀 Sürətli & Etibarlı Kargo Xidməti
+                            Sürətli & Etibarlı Kargo Xidməti
                         </Label>
                         <Text
                             variant="display-1"

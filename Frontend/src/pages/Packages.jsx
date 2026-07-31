@@ -42,6 +42,13 @@ const Packages = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [addFormData, setAddFormData] = useState({ trackingNumber: '', weight: '', price: '' });
 
+    // Çəki/Qiymət kimi sərbəst mətn sahələrindəki ədədin mənfi olmadığını yoxlayır
+    const validateNonNegativeNumber = (value, fieldName) => {
+        if (!/\d/.test(String(value))) return `${fieldName} üçün rəqəm daxil edin!`;
+        if (/-/.test(String(value))) return `${fieldName} mənfi ola bilməz!`;
+        return null;
+    };
+
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editFormData, setEditFormData] = useState({ id: null, trackingNumber: '', weight: '', price: '', status: '' });
 
@@ -70,7 +77,11 @@ const Packages = () => {
 
     // Yeni Bağlama Yaratmaq (userId əlavə olunur)
     const handleCreate = async () => {
-        if (!addFormData.trackingNumber) return alert("Trek nömrəsini daxil edin!");
+        if (!addFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
+        const weightError = validateNonNegativeNumber(addFormData.weight, "Çəki");
+        if (weightError) return alert(weightError);
+        const priceError = validateNonNegativeNumber(addFormData.price, "Qiymət");
+        if (priceError) return alert(priceError);
         try {
             await api.post('/packages', {
                 ...addFormData,
@@ -85,6 +96,11 @@ const Packages = () => {
     };
 
     const handleUpdate = async () => {
+        if (!editFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
+        const weightError = validateNonNegativeNumber(editFormData.weight, "Çəki");
+        if (weightError) return alert(weightError);
+        const priceError = validateNonNegativeNumber(editFormData.price, "Qiymət");
+        if (priceError) return alert(priceError);
         try {
             await api.put(`/packages/${editFormData.id}`, editFormData);
             setIsEditModalOpen(false);
@@ -126,7 +142,7 @@ const Packages = () => {
     };
 
     const handleHardDelete = async (id) => {
-        if (window.confirm("⚠️ DİQQƏT! Bu bağlama verilənlər bazasından HƏMİŞƏLİK silinəcək. Əminsiniz?")) {
+        if (window.confirm("DİQQƏT! Bu bağlama verilənlər bazasından HƏMİŞƏLİK silinəcək. Əminsiniz?")) {
             try {
                 await api.delete(`/packages/${id}/hard`);
                 fetchPackages();
@@ -268,7 +284,7 @@ const Packages = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <Text variant="header-2">
-                        {canViewAll ? "📦 Bütün Bağlamalar" : "📦 Mənim Bağlamalarım"}
+                        {canViewAll ? "Bütün Bağlamalar" : "Mənim Bağlamalarım"}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                         {canViewAll ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
@@ -296,8 +312,8 @@ const Packages = () => {
                     value={activeTab}
                     onUpdate={(val) => setActiveTab(val)}
                     options={[
-                        { value: 'active', content: '📦 Aktiv Bağlamalar' },
-                        { value: 'archived', content: '🗑️ Zibil Qutusu (Arxiv)' }
+                        { value: 'active', content: 'Aktiv Bağlamalar' },
+                        { value: 'archived', content: 'Zibil Qutusu (Arxiv)' }
                     ]}
                 />
             </div>

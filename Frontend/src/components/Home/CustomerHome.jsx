@@ -77,7 +77,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <Text variant="header-2" style={{ color: '#ffffff' }}>
-                                Xoş gəldiniz, {user.firstName || user.fullName || 'Müştəri'}! 👋
+                                Xoş gəldiniz, {user.firstName || user.fullName || 'Müştəri'}!
                             </Text>
                             <Label theme="info" size="m">Müştəri Portalı</Label>
                         </div>

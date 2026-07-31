@@ -4,10 +4,8 @@ import App from './App.jsx';
 
 import '@gravity-ui/uikit/styles/fonts.css';
 import '@gravity-ui/uikit/styles/styles.css';
-import { ThemeProvider } from '@gravity-ui/uikit';
+import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-    <ThemeProvider theme="light">
-        <App />
-    </ThemeProvider>
+    <App />
 );

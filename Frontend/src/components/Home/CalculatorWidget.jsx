@@ -8,12 +8,20 @@ const CalculatorWidget = () => {
     const [weight, setWeight] = useState('');
     const [dimensions, setDimensions] = useState({ length: '', width: '', height: '' });
     const [result, setResult] = useState(null);
+    const [error, setError] = useState('');
 
     const calculatePrice = () => {
+        setError('');
         const w = parseFloat(weight) || 0;
         const l = parseFloat(dimensions.length) || 0;
         const width = parseFloat(dimensions.width) || 0;
         const h = parseFloat(dimensions.height) || 0;
+
+        if (w < 0 || l < 0 || width < 0 || h < 0) {
+            setResult(null);
+            setError('Çəki və ölçülər mənfi ola bilməz.');
+            return;
+        }
 
         if (w === 0) return;
 
@@ -42,7 +50,7 @@ const CalculatorWidget = () => {
             }}
         >
             <div style={{ marginBottom: '16px' }}>
-                <Text variant="header-2" style={{ color: '#ffffff' }}>🧮 Çatdırılma Kalkulyatoru</Text>
+                <Text variant="header-2" style={{ color: '#ffffff' }}>Çatdırılma Kalkulyatoru</Text>
                 <Text variant="body-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                     Bağlamanızın təxmini daşınma xərcini hesablayın
                 </Text>
@@ -66,6 +74,7 @@ const CalculatorWidget = () => {
                     <TextInput
                         size="l"
                         type="number"
+                        min="0"
                         placeholder="0.00"
                         value={weight}
                         onUpdate={setWeight}
@@ -79,6 +88,7 @@ const CalculatorWidget = () => {
                     <TextInput
                         size="m"
                         type="number"
+                        min="0"
                         placeholder="0"
                         value={dimensions.length}
                         onUpdate={(val) => setDimensions({ ...dimensions, length: val })}
@@ -89,6 +99,7 @@ const CalculatorWidget = () => {
                     <TextInput
                         size="m"
                         type="number"
+                        min="0"
                         placeholder="0"
                         value={dimensions.width}
                         onUpdate={(val) => setDimensions({ ...dimensions, width: val })}
@@ -99,6 +110,7 @@ const CalculatorWidget = () => {
                     <TextInput
                         size="m"
                         type="number"
+                        min="0"
                         placeholder="0"
                         value={dimensions.height}
                         onUpdate={(val) => setDimensions({ ...dimensions, height: val })}
@@ -110,6 +122,12 @@ const CalculatorWidget = () => {
                 <Button.Icon><Calculator /></Button.Icon>
                 Hesabla
             </Button>
+
+            {error && (
+                <div style={{ marginTop: '16px' }}>
+                    <Alert theme="danger" title="Xəta" message={error} />
+                </div>
+            )}
 
             {result && (
                 <div style={{ marginTop: '16px' }}>

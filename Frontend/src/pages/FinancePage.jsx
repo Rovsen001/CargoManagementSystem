@@ -74,7 +74,7 @@ const FinancePage = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <Text variant="header-2" style={{ color: '#ffffff', display: 'block', marginBottom: '4px' }}>
-                        💳 Maliyyə və Balans Portalı
+                        Maliyyə və Balans Portalı
                     </Text>
                     <Text variant="body-2" color="secondary">
                         Hesabınızın cari balansını idarə edin, onlayn ödəniş edin və faktura tarixçənizə baxın.
@@ -153,7 +153,7 @@ const FinancePage = () => {
                 {/* Quick Payment Info Card */}
                 <Card style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
                     <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '8px', display: 'block' }}>
-                        🔒 Təhlükəsiz Ödəniş
+                        Təhlükəsiz Ödəniş
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '13px', lineHeight: 1.5, marginBottom: '16px' }}>
                         Visa, Mastercard və Birkart vasitəsilə 3D Secure təhlükəsizlik standartı altında komissiyasız balans artırın.
@@ -166,7 +166,7 @@ const FinancePage = () => {
             <Card style={{ backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px', overflow: 'hidden' }}>
                 <div style={{ padding: '24px', borderBottom: '1px solid #30363d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <Text variant="header-1" style={{ color: '#ffffff' }}>📋 Ödəniş və Əməliyyat Tarixçəsi</Text>
+                        <Text variant="header-1" style={{ color: '#ffffff' }}>Ödəniş və Əməliyyat Tarixçəsi</Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '2px', fontSize: '13px' }}>
                             Hesabınıza mədaxil olan və kargo daşımaları üçün silinən məbləğlərin siyahısı
                         </Text>
@@ -242,7 +242,7 @@ const FinancePage = () => {
                                                     description: tx.description || 'Balans artırımı (Onlayn Ödəniş)'
                                                 })}
                                             >
-                                                📄 Qəbz
+                                                Qəbz
                                             </Button>
                                         </td>
                                     </tr>
@@ -273,7 +273,7 @@ const FinancePage = () => {
                 <Modal open={Boolean(selectedReceipt)} onClose={() => setSelectedReceipt(null)}>
                     <div style={{ padding: '28px', width: '440px', backgroundColor: '#161b22', color: '#ffffff', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '12px' }}>
-                            <Text variant="header-2" style={{ color: '#ffffff' }}>🧾 Rəqəmsal Əməliyyat Qəbzi</Text>
+                            <Text variant="header-2" style={{ color: '#ffffff' }}>Rəqəmsal Əməliyyat Qəbzi</Text>
                             <Label theme="success">Tamamlandı</Label>
                         </div>
 
@@ -299,7 +299,7 @@ const FinancePage = () => {
                         </Card>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Button view="outlined" onClick={() => window.print()}>🖨️ Çap Et</Button>
+                            <Button view="outlined" onClick={() => window.print()}>Çap Et</Button>
                             <Button view="action" onClick={() => setSelectedReceipt(null)}>Bağla</Button>
                         </div>
                     </div>

@@ -55,7 +55,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
 
         if (method === 'card') {
             const cleanCard = cardNumber.replace(/\s/g, '');
-            if (cleanCard.length < 16) {
+            if (cleanCard.length !== 16 || !/^\d+$/.test(cleanCard)) {
                 setError('Kart nömrəsi 16 rəqəmdən ibarət olmalıdır.');
                 return;
             }
@@ -148,9 +148,9 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '16px' }}>
                     <div>
                         <Text variant="header-2" style={{ color: '#ffffff' }}>
-                            {step === 1 && '💳 Balans Artırılması'}
-                            {step === 2 && '🔒 3D Secure Təsdiq'}
-                            {step === 3 && '✅ Ödəniş Qəbzi'}
+                            {step === 1 && 'Balans Artırılması'}
+                            {step === 2 && '3D Secure Təsdiq'}
+                            {step === 3 && 'Ödəniş Qəbzi'}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '2px', fontSize: '13px' }}>
                             {step === 1 && 'Təhlükəsiz SSL 256-bit şifrələnmiş onlayn ödəniş'}
@@ -178,7 +178,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                                     onClick={() => setMethod('card')}
                                     type="button"
                                 >
-                                    💳 Bank Kartı
+                                    Bank Kartı
                                 </Button>
                                 <Button
                                     size="l"
@@ -186,7 +186,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                                     onClick={() => setMethod('applepay')}
                                     type="button"
                                 >
-                                    🍏 Apple Pay
+                                    Apple Pay
                                 </Button>
                                 <Button
                                     size="l"
@@ -194,7 +194,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                                     onClick={() => setMethod('emanat')}
                                     type="button"
                                 >
-                                    🏧 E-Manat
+                                    E-Manat
                                 </Button>
                             </div>
                         </div>
@@ -219,6 +219,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                             <TextInput
                                 size="xl"
                                 type="number"
+                                min="0"
                                 placeholder="Özəl məbləğ daxil edin"
                                 value={amount}
                                 onUpdate={(val) => setAmount(val)}
@@ -370,7 +371,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                             <Button view="outlined" size="l" width="max" onClick={() => window.print()}>
-                                🖨️ Qəbzi Çap Et
+                                Qəbzi Çap Et
                             </Button>
                             <Button view="action" size="l" width="max" onClick={handleReset}>
                                 Bağla

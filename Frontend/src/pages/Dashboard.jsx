@@ -60,7 +60,7 @@ const Dashboard = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             <div>
-                <Text variant="header-2" style={{ color: '#fff', marginBottom: '4px', display: 'block' }}>Xoş gəldiniz! 👋</Text>
+                <Text variant="header-2" style={{ color: '#fff', marginBottom: '4px', display: 'block' }}>Xoş gəldiniz!</Text>
                 <Text variant="body-1" color="secondary">Karqo sistemindəki son vəziyyət və analitika.</Text>
             </div>
 
@@ -83,7 +83,7 @@ const Dashboard = () => {
 
                 {/* SOL TƏRƏF: Sütun Qrafiki (Bar Chart) */}
                 <Card style={{ padding: '24px', flex: 1, minWidth: '320px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <Text variant="subheader-2" style={{ color: '#fff' }}>📊 Bağlama Statuslarının Sütun Qrafiki</Text>
+                    <Text variant="subheader-2" style={{ color: '#fff' }}>Bağlama Statuslarının Sütun Qrafiki</Text>
 
                     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '220px', paddingTop: '20px', borderBottom: '1px solid #30363d' }}>
                         {chartData.map((item, index) => {
@@ -114,7 +114,7 @@ const Dashboard = () => {
 
                 {/* SAĞ TƏRƏF: Faizlə Proqres Paneli (Progress Chart) */}
                 <Card style={{ padding: '24px', flex: 1, minWidth: '320px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <Text variant="subheader-2" style={{ color: '#fff' }}>📈 Ümumi Paylanma Faizi</Text>
+                    <Text variant="subheader-2" style={{ color: '#fff' }}>Ümumi Paylanma Faizi</Text>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', justifyContent: 'center', height: '100%' }}>
                         {chartData.map((item, index) => {

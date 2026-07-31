@@ -75,21 +75,21 @@ const Navbar = ({
                             size="l"
                             onClick={() => onNavigate('packages')}
                         >
-                            📦 Bağlamalarım
+                            Bağlamalarım
                         </Button>
                         <Button
                             view={activePage === 'finance' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('finance')}
                         >
-                            💳 Maliyyə & Balans
+                            Maliyyə & Balans
                         </Button>
                         <Button
                             view={activePage === 'warehouses' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('warehouses')}
                         >
-                            🌐 Xarici Anbarlar
+                            Xarici Anbarlar
                         </Button>
                     </>
                 )}
@@ -174,7 +174,7 @@ const Navbar = ({
                                 size="m"
                                 theme={user.role === 'Admin' ? 'warning' : 'normal'}
                             />
-                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '2px' }}>
                                 <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
                                     {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
                                 </Text>

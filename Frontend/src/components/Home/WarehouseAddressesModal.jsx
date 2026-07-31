@@ -53,7 +53,7 @@ const WarehouseAddressesModal = ({ user }) => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Text variant="header-2" style={{ color: '#ffffff' }}>🌐 Xarici Anbar Ünvanlarınız</Text>
+                            <Text variant="header-2" style={{ color: '#ffffff' }}>Xarici Anbar Ünvanlarınız</Text>
                             <Label theme="info" size="m">Müştəri Kodunuz: {customerCode}</Label>
                         </div>
                         <Text variant="body-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>

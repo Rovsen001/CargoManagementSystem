@@ -13,6 +13,11 @@ const ResetPassword = ({ token, switchToLogin }) => {
         e.preventDefault();
         setError('');
 
+        if (newPassword.length < 6) {
+            setError('Şifrə ən azı 6 simvoldan ibarət olmalıdır!');
+            return;
+        }
+
         if (newPassword !== confirmPassword) {
             setError('Şifrələr bir-biri ilə üst-üstə düşmür!');
             return;
@@ -33,7 +38,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
             <Card style={{ width: '380px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
-                    <Text variant="header-2">Yeni Şifrə Təyin Et 🔒</Text>
+                    <Text variant="header-2">Yeni Şifrə Təyin Et</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
                         Hesabınız üçün yeni şifrə daxil edin.
                     </Text>
