@@ -2,35 +2,43 @@
 import React from 'react';
 import { Card, Text, Button, Label } from '@gravity-ui/uikit';
 import { Box, ArrowRight, ShieldCheck, Clock, Globe, Rocket } from '@gravity-ui/icons';
+import Hero3D from './Hero3D';
 
 const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
     return (
-        <Card
-            view="raised"
+        <div
             style={{
-                padding: '40px 32px',
+                position: 'relative',
                 marginBottom: '32px',
-                background: 'linear-gradient(135deg, #161b22 0%, #1f293d 100%)',
-                border: '1px solid #30363d',
-                borderRadius: '16px',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                padding: '48px 32px',
+                background: 'linear-gradient(180deg, #0d1117 0%, #131826 100%)',
+                border: '1px solid #241a33',
+                borderRadius: '24px',
+                overflow: 'hidden',
+                boxShadow: '0 8px 40px rgba(0, 0, 0, 0.5)'
             }}
         >
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'center' }}>
+            {/* Arxa fonda əsl 3D fırlanan qlobus/nüvə səhnəsi */}
+            <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+                <Hero3D />
+            </div>
+
+            <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'center' }}>
                 {/* Left Column: Heading, Subtitle & Actions */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div>
-                        <Label theme="info" size="m" style={{ marginBottom: '12px' }}>
+                        <Label theme="info" size="m" style={{ marginBottom: '12px', backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
                             Sürətli & Etibarlı Kargo Xidməti
                         </Label>
                         <Text
                             variant="display-1"
+                            className="gradient-text"
                             style={{
-                                color: '#ffffff',
                                 fontWeight: 800,
-                                lineHeight: 1.2,
+                                lineHeight: 1.15,
                                 display: 'block',
-                                marginTop: '8px'
+                                marginTop: '8px',
+                                fontSize: '42px'
                             }}
                         >
                             Dünyadan Qapınıza Xəyal Etdiyiniz Sürətlə
@@ -38,7 +46,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                     </div>
 
                     <Text variant="body-2" color="secondary" style={{ fontSize: '15px', lineHeight: 1.6 }}>
-                        CargoMS ilə Türkiyə, ABŞ və Avropadan olan sifarişlərinizi real vaxtda izləyin, 
+                        CargoMS ilə Türkiyə, ABŞ və Avropadan olan sifarişlərinizi real vaxtda izləyin,
                         çatdırılma xərclərini dərhal hesablayın və anbarlarımızdan maneəsiz təhvil alın.
                     </Text>
 
@@ -47,7 +55,13 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                             size="xl"
                             view="action"
                             onClick={onNavigateRegister}
-                            style={{ padding: '0 24px', fontWeight: 600 }}
+                            className="pill-btn"
+                            style={{
+                                padding: '0 28px',
+                                fontWeight: 600,
+                                background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+                                border: 'none'
+                            }}
                         >
                             Hesab Yarat <Button.Icon><ArrowRight /></Button.Icon>
                         </Button>
@@ -55,20 +69,21 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                             size="xl"
                             view="outlined"
                             onClick={onNavigateLogin}
-                            style={{ padding: '0 24px' }}
+                            className="pill-btn"
+                            style={{ padding: '0 28px' }}
                         >
                             Daxil Ol
                         </Button>
                     </div>
 
                     {/* Features Badges */}
-                    <div style={{ display: 'flex', gap: '20px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #30363d' }}>
+                    <div style={{ display: 'flex', gap: '20px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #241a33' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Clock style={{ color: '#56d364' }} />
                             <Text variant="caption-2" color="secondary">24/7 Dəstək & İzləmə</Text>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <ShieldCheck style={{ color: '#58a6ff' }} />
+                            <ShieldCheck style={{ color: '#a78bfa' }} />
                             <Text variant="caption-2" color="secondary">Sığortalı Çatdırılma</Text>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -80,8 +95,18 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
 
                 {/* Right Column: Visual Feature Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <Card view="outlined" style={{ padding: '20px', backgroundColor: '#0d1117', borderColor: '#30363d' }}>
-                        <Box size={28} style={{ color: '#1f6feb', marginBottom: '12px' }} />
+                    <Card
+                        view="outlined"
+                        className="hover-lift float-anim fade-in-up fade-in-up-delay-1"
+                        style={{
+                            padding: '20px',
+                            backgroundColor: 'rgba(22, 27, 34, 0.6)',
+                            backdropFilter: 'blur(12px)',
+                            borderColor: '#30363d',
+                            borderRadius: '16px'
+                        }}
+                    >
+                        <Box size={28} style={{ color: '#a78bfa', marginBottom: '12px' }} />
                         <Text variant="subheader-2" style={{ display: 'block', color: '#ffffff', marginBottom: '6px' }}>
                             Ağıllı Anbar
                         </Text>
@@ -90,7 +115,18 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                         </Text>
                     </Card>
 
-                    <Card view="outlined" style={{ padding: '20px', backgroundColor: '#0d1117', borderColor: '#30363d' }}>
+                    <Card
+                        view="outlined"
+                        className="hover-lift float-anim fade-in-up fade-in-up-delay-2"
+                        style={{
+                            padding: '20px',
+                            backgroundColor: 'rgba(22, 27, 34, 0.6)',
+                            backdropFilter: 'blur(12px)',
+                            borderColor: '#30363d',
+                            borderRadius: '16px',
+                            animationDuration: '7s'
+                        }}
+                    >
                         <Rocket size={28} style={{ color: '#2ea043', marginBottom: '12px' }} />
                         <Text variant="subheader-2" style={{ display: 'block', color: '#ffffff', marginBottom: '6px' }}>
                             Ekspress Uçuşlar
@@ -101,7 +137,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                     </Card>
                 </div>
             </div>
-        </Card>
+        </div>
     );
 };
 

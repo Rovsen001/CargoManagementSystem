@@ -219,12 +219,11 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                             <TextInput
                                 size="xl"
                                 type="number"
-                                min="0"
+                                min="1"
                                 placeholder="Özəl məbləğ daxil edin"
                                 value={amount}
                                 onUpdate={(val) => setAmount(val)}
                                 step="0.01"
-                                min="1"
                             />
                         </div>
 

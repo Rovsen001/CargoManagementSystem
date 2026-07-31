@@ -283,7 +283,7 @@ const Packages = () => {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                    <Text variant="header-2">
+                    <Text variant="header-2" className="gradient-text">
                         {canViewAll ? "Bütün Bağlamalar" : "Mənim Bağlamalarım"}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
@@ -298,7 +298,13 @@ const Packages = () => {
                     </Button>
 
                     {activeTab === 'active' && (
-                        <Button view="action" size="l" onClick={() => setIsAddModalOpen(true)}>
+                        <Button
+                            view="action"
+                            size="l"
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="pill-btn"
+                            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
+                        >
                             <Icon data={Plus} />
                             Yeni Bağlama Bəyan Et
                         </Button>

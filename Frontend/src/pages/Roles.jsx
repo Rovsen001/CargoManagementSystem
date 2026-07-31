@@ -118,19 +118,25 @@ const Roles = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                    <Text variant="header-2">Rollar və İcazələr</Text>
+                    <Text variant="header-2" className="gradient-text">Rollar və İcazələr</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                         Sistemdəki rolları idarə edin, yeni rol yaradın və hər birinə icazələr təyin edin.
                     </Text>
                 </div>
-                <Button view="action" size="l" onClick={openCreateModal}>
+                <Button
+                    view="action"
+                    size="l"
+                    onClick={openCreateModal}
+                    className="pill-btn"
+                    style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
+                >
                     <Icon data={Plus} /> Yeni Rol
                 </Button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
                 {roles.map((role) => (
-                    <Card key={role.id} style={{ padding: '20px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <Card key={role.id} className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', border: '1px solid #30363d', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 {role.isSuperAdmin && <Icon data={ShieldCheck} style={{ color: '#f5a623' }} />}
@@ -212,7 +218,15 @@ const Roles = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                         <Button view="flat" onClick={() => setIsModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleSave} loading={saving}>Yadda saxla</Button>
+                        <Button
+                            view="action"
+                            onClick={handleSave}
+                            loading={saving}
+                            className="pill-btn"
+                            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
+                        >
+                            Yadda saxla
+                        </Button>
                     </div>
                 </div>
             </Modal>

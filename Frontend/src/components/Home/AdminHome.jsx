@@ -114,7 +114,7 @@ const AdminHome = ({ user, onNavigate }) => {
 
             {/* System KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Qeydiyyatlı İstifadəçilər</Text>
                         <Person style={{ color: '#58a6ff' }} size={22} />
@@ -127,7 +127,7 @@ const AdminHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Cəmi Bağlamalar</Text>
                         <Box style={{ color: '#e3b341' }} size={22} />
@@ -140,7 +140,7 @@ const AdminHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Ümumi Gəlir (AZN)</Text>
                         <Wallet style={{ color: '#56d364' }} size={22} />
@@ -153,7 +153,7 @@ const AdminHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Prosesdə Bağlamalar</Text>
                         <CircleExclamation style={{ color: '#f85149' }} size={22} />

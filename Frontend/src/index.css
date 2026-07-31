@@ -90,3 +90,16 @@ html, body {
     background-clip: text;
     color: transparent;
 }
+
+/* Rəqəm sahələrindəki brauzerin defolt yuxarı/aşağı ox düymələrini gizlədirik
+   (tünd fonla uyğun gəlməyən ağ/boz "spinner" görünüşü) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}

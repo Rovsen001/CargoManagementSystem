@@ -66,12 +66,12 @@ const Dashboard = () => {
 
             {/* 1. Üst Sıra: Statistika Kartları */}
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <Card style={cardStyle}>
+                <Card className="hover-lift" style={cardStyle}>
                     <Text variant="body-2" color="secondary">Cəmi Bağlamalar</Text>
                     <Text variant="display-2" style={{ color: '#fff' }}>{stats?.total || 0}</Text>
                 </Card>
                 {chartData.map((item, index) => (
-                    <Card key={index} style={cardStyle}>
+                    <Card key={index} className="hover-lift" style={cardStyle}>
                         <Text variant="body-2" color="secondary">{item.label}</Text>
                         <Text variant="display-2" style={{ color: item.color }}>{item.value}</Text>
                     </Card>

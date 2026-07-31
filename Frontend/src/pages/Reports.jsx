@@ -118,7 +118,7 @@ const Reports = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-                <Text variant="header-2">Hesabatlar</Text>
+                <Text variant="header-2" className="gradient-text">Hesabatlar</Text>
                 <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
                     Tarix aralığına görə bağlama və gəlir hesabatlarına baxın, Excel formatında export edin.
                 </Text>
@@ -133,7 +133,14 @@ const Reports = () => {
                     <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>Son tarix</Text>
                     <TextInput type="date" value={to} onChange={(e) => setTo(e.target.value)} size="l" />
                 </div>
-                <Button view="action" size="l" onClick={fetchReport} loading={loading}>
+                <Button
+                    view="action"
+                    size="l"
+                    onClick={fetchReport}
+                    loading={loading}
+                    className="pill-btn"
+                    style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
+                >
                     <Icon data={ChartLine} /> Hesabatı Göstər
                 </Button>
                 <Button view="outlined" size="l" onClick={handleExportExcel}>
@@ -152,23 +159,23 @@ const Reports = () => {
             ) : data ? (
                 <>
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                        <Card style={cardStyle}>
+                        <Card className="hover-lift" style={cardStyle}>
                             <Text variant="body-2" color="secondary">Seçilmiş Dövrdə Bağlamalar</Text>
                             <Text variant="display-2" style={{ color: '#fff' }}>{data.totalPackages}</Text>
                         </Card>
-                        <Card style={cardStyle}>
+                        <Card className="hover-lift" style={cardStyle}>
                             <Text variant="body-2" color="secondary">Seçilmiş Dövrdə Gəlir</Text>
                             <Text variant="display-2" style={{ color: '#56d364' }}>₼ {parseFloat(data.totalRevenue).toFixed(2)}</Text>
                         </Card>
-                        <Card style={cardStyle}>
+                        <Card className="hover-lift" style={cardStyle}>
                             <Text variant="body-2" color="secondary">Bəyan edildi</Text>
                             <Text variant="display-2" style={{ color: '#5282ff' }}>{data.statusBreakdown.declared}</Text>
                         </Card>
-                        <Card style={cardStyle}>
+                        <Card className="hover-lift" style={cardStyle}>
                             <Text variant="body-2" color="secondary">Yoldadır / Gömrükdə</Text>
                             <Text variant="display-2" style={{ color: '#f5a623' }}>{data.statusBreakdown.onTheWay + data.statusBreakdown.customs}</Text>
                         </Card>
-                        <Card style={cardStyle}>
+                        <Card className="hover-lift" style={cardStyle}>
                             <Text variant="body-2" color="secondary">Filialda / Verildi</Text>
                             <Text variant="display-2" style={{ color: '#3fb950' }}>{data.statusBreakdown.arrived}</Text>
                         </Card>

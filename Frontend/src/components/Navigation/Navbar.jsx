@@ -40,11 +40,11 @@ const Navbar = ({
                 style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
             >
                 <div style={{
-                    backgroundColor: '#1f6feb',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
                     padding: '10px',
                     borderRadius: '10px',
                     display: 'flex',
-                    boxShadow: '0 0 12px rgba(31, 111, 235, 0.4)'
+                    boxShadow: '0 0 16px rgba(139, 92, 246, 0.45)'
                 }}>
                     <Icon data={Box} size={22} style={{ color: '#ffffff' }} />
                 </div>

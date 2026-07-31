@@ -73,7 +73,7 @@ const FinancePage = () => {
             {/* Header Title & Top Up CTA */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <Text variant="header-2" style={{ color: '#ffffff', display: 'block', marginBottom: '4px' }}>
+                    <Text variant="header-2" className="gradient-text" style={{ display: 'block', marginBottom: '4px' }}>
                         Maliyyə və Balans Portalı
                     </Text>
                     <Text variant="body-2" color="secondary">
@@ -85,6 +85,8 @@ const FinancePage = () => {
                     size="xl"
                     view="action"
                     onClick={() => setIsPaymentModalOpen(true)}
+                    className="pill-btn"
+                    style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                 >
                     <Button.Icon><Plus /></Button.Icon>
                     Balansı Artır (Onlayn Ödəniş)
@@ -95,7 +97,7 @@ const FinancePage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
 
                 {/* Balance Card */}
-                <Card style={{
+                <Card className="hover-lift" style={{
                     padding: '28px',
                     background: 'linear-gradient(135deg, #161b22 0%, #1c2b1e 100%)',
                     borderColor: '#2ea043',
@@ -130,7 +132,7 @@ const FinancePage = () => {
                 </Card>
 
                 {/* Monthly Spent Card */}
-                <Card style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
+                <Card className="hover-lift" style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <Text variant="caption-2" color="secondary" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
                             Bu Aykı Xərclər
@@ -151,7 +153,7 @@ const FinancePage = () => {
                 </Card>
 
                 {/* Quick Payment Info Card */}
-                <Card style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
+                <Card className="hover-lift" style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
                     <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '8px', display: 'block' }}>
                         Təhlükəsiz Ödəniş
                     </Text>

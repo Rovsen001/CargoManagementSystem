@@ -109,7 +109,7 @@ const CustomerHome = ({ user, onNavigate }) => {
 
             {/* Quick Stat Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Aktiv Bağlamalar</Text>
                         <Box style={{ color: '#1f6feb' }} size={22} />
@@ -122,7 +122,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Cari Balans</Text>
                         <Wallet style={{ color: '#56d364' }} size={22} />
@@ -135,7 +135,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Təhvil Alınacaq</Text>
                         <Box style={{ color: '#e3b341' }} size={22} />
@@ -148,7 +148,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Tamamlanmış Bağlamalar</Text>
                         <ShieldCheck style={{ color: '#a371f7' }} size={22} />

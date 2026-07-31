@@ -87,7 +87,7 @@ const StaffHome = ({ user, onNavigate }) => {
 
             {/* Warehouse KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Yeni Bəyan Edilmiş</Text>
                         <Rocket style={{ color: '#58a6ff' }} size={22} />
@@ -100,7 +100,7 @@ const StaffHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Yolda / Gömrükdə</Text>
                         <Box style={{ color: '#e3b341' }} size={22} />
@@ -113,7 +113,7 @@ const StaffHome = ({ user, onNavigate }) => {
                     </Text>
                 </Card>
 
-                <Card view="outlined" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
+                <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text variant="body-1" color="secondary">Filialda / Təhvil Verilib</Text>
                         <ShieldCheck style={{ color: '#56d364' }} size={22} />
