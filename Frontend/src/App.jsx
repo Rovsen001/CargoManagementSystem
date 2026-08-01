@@ -12,6 +12,7 @@ import Packages from './pages/Packages';
 import Customers from './pages/Customers';
 import Reports from './pages/Reports';
 import Roles from './pages/Roles';
+import Warehouses from './pages/Warehouses';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -317,6 +318,15 @@ function App() {
                                     Hesabatlar
                                 </Button>
                             )}
+                            {hasPermission('warehouses.manage') && (
+                                <Button
+                                    view={activePage === 'manage-warehouses' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('manage-warehouses')}
+                                >
+                                    Anbarlar
+                                </Button>
+                            )}
                             {isSuperAdminUser && (
                                 <Button
                                     view={activePage === 'roles' ? 'action' : 'flat-secondary'}
@@ -366,6 +376,11 @@ function App() {
                                 )}
                                 {activePage === 'roles' && (
                                     isSuperAdminUser ? <Roles /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'manage-warehouses' && (
+                                    hasPermission('warehouses.manage') ? <Warehouses /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}

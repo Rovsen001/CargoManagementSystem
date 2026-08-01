@@ -42,10 +42,11 @@ const Packages = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [addFormData, setAddFormData] = useState({ trackingNumber: '', weight: '', price: '' });
 
-    // Çəki/Qiymət kimi sərbəst mətn sahələrindəki ədədin mənfi olmadığını yoxlayır
+    // Çəki/Qiymət ədəd sahələrinin düzgün, mənfi olmayan rəqəm olduğunu yoxlayır
     const validateNonNegativeNumber = (value, fieldName) => {
-        if (!/\d/.test(String(value))) return `${fieldName} üçün rəqəm daxil edin!`;
-        if (/-/.test(String(value))) return `${fieldName} mənfi ola bilməz!`;
+        const num = parseFloat(value);
+        if (value === '' || isNaN(num)) return `${fieldName} üçün rəqəm daxil edin!`;
+        if (num < 0) return `${fieldName} mənfi ola bilməz!`;
         return null;
     };
 
@@ -192,8 +193,8 @@ const Packages = () => {
               <tr>
                 <td>${pkg.id}</td>
                 <td><b>${pkg.trackingNumber || ''}</b></td>
-                <td>${pkg.weight || ''}</td>
-                <td>${pkg.price || ''}</td>
+                <td>${parseFloat(pkg.weight).toFixed(2)} kq</td>
+                <td>$${parseFloat(pkg.price).toFixed(2)}</td>
                 <td>${pkg.status || ''}</td>
                 <td>${pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString('az-AZ') : ''}</td>
               </tr>
@@ -222,8 +223,8 @@ const Packages = () => {
     const columns = [
         { id: 'id', name: 'ID', meta: { width: '60px' } },
         { id: 'trackingNumber', name: 'Trek Nömrəsi', template: (item) => <strong>{item.trackingNumber}</strong> },
-        { id: 'weight', name: 'Çəki (kq)' },
-        { id: 'price', name: 'Qiymət ($)' },
+        { id: 'weight', name: 'Çəki (kq)', template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
+        { id: 'price', name: 'Qiymət ($)', template: (item) => `$${parseFloat(item.price).toFixed(2)}` },
         { id: 'status', name: 'Status', template: (item) => renderStatusBadge(item.status) },
         {
             id: 'createdAt',
@@ -389,11 +390,11 @@ const Packages = () => {
                     </div>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Çəki (kq)</Text>
-                        <TextInput placeholder="Məs: 1.5 kq" value={addFormData.weight} onChange={(e) => setAddFormData({ ...addFormData, weight: e.target.value })} />
+                        <TextInput type="number" min="0" step="0.01" placeholder="Məs: 1.5" value={addFormData.weight} onChange={(e) => setAddFormData({ ...addFormData, weight: e.target.value })} />
                     </div>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
-                        <TextInput placeholder="Məs: $12.50" value={addFormData.price} onChange={(e) => setAddFormData({ ...addFormData, price: e.target.value })} />
+                        <TextInput type="number" min="0" step="0.01" placeholder="Məs: 12.50" value={addFormData.price} onChange={(e) => setAddFormData({ ...addFormData, price: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                         <Button view="flat" onClick={() => setIsAddModalOpen(false)}>Ləğv et</Button>
@@ -411,11 +412,11 @@ const Packages = () => {
                     </div>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Çəki (kq)</Text>
-                        <TextInput value={editFormData.weight} onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value })} />
+                        <TextInput type="number" min="0" step="0.01" value={editFormData.weight} onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value })} />
                     </div>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
-                        <TextInput value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
+                        <TextInput type="number" min="0" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
                     </div>
                     {canChangeStatus && (
                         <div>

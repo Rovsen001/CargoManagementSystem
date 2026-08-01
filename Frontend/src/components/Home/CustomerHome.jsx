@@ -188,9 +188,9 @@ const CustomerHome = ({ user, onNavigate }) => {
                             border: '1px solid #21262d'
                         }}>
                             <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>{pkg.trackingNumber}</Text>
-                            <Text color="secondary">{pkg.weight || '-'}</Text>
+                            <Text color="secondary">{pkg.weight != null ? `${parseFloat(pkg.weight).toFixed(2)} kq` : '-'}</Text>
                             <div><Label theme={statusTheme[pkg.status] || 'normal'}>{pkg.status || 'Təyin edilməyib'}</Label></div>
-                            <Text style={{ color: '#56d364', fontWeight: 600 }}>{pkg.price || '-'}</Text>
+                            <Text style={{ color: '#56d364', fontWeight: 600 }}>{pkg.price != null ? `$${parseFloat(pkg.price).toFixed(2)}` : '-'}</Text>
                         </div>
                     )) : (
                         <Text color="secondary" style={{ padding: '20px 0', textAlign: 'center', display: 'block' }}>

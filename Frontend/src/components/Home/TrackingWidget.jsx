@@ -88,10 +88,10 @@ const TrackingWidget = () => {
                             Status: <Text color="positive">{packageData.status || 'Təyin edilməyib'}</Text>
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                            Çəki: {packageData.weight || '-'}
+                            Çəki: {packageData.weight != null ? `${parseFloat(packageData.weight).toFixed(2)} kq` : '-'}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                            Qiymət: {packageData.price || '-'}
+                            Qiymət: {packageData.price != null ? `$${parseFloat(packageData.price).toFixed(2)}` : '-'}
                         </Text>
                     </Card>
                 )}

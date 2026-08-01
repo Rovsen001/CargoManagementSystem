@@ -46,8 +46,8 @@ const Reports = () => {
     const columns = [
         { id: 'id', name: 'ID', meta: { width: '60px' } },
         { id: 'trackingNumber', name: 'Trek Nömrəsi' },
-        { id: 'weight', name: 'Çəki' },
-        { id: 'price', name: 'Qiymət' },
+        { id: 'weight', name: 'Çəki', template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
+        { id: 'price', name: 'Qiymət', template: (item) => `$${parseFloat(item.price).toFixed(2)}` },
         {
             id: 'status',
             name: 'Status',
@@ -83,8 +83,8 @@ const Reports = () => {
               <tr>
                 <td>${pkg.id}</td>
                 <td><b>${pkg.trackingNumber || ''}</b></td>
-                <td>${pkg.weight || ''}</td>
-                <td>${pkg.price || ''}</td>
+                <td>${parseFloat(pkg.weight).toFixed(2)} kq</td>
+                <td>$${parseFloat(pkg.price).toFixed(2)}</td>
                 <td>${pkg.status || ''}</td>
                 <td>${pkg.createdAt ? new Date(pkg.createdAt).toLocaleString('az-AZ') : ''}</td>
               </tr>

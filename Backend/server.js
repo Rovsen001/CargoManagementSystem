@@ -99,12 +99,6 @@ function requirePermission(key) {
     };
 }
 
-// Çəki/Qiymət kimi sərbəst mətn sahələrində "-" işarəsi olub-olmadığını yoxlayır
-// (valyuta/vahid simvolu ilə rəqəm arasında ola biləcəyi üçün bitişiklik axtarmırıq)
-function hasNegativeNumber(value) {
-    return /-/.test(String(value ?? ''));
-}
-
 // Yalnız Super Admin üçün (rol idarəetməsi kimi checkbox-larla ötürülə bilməyən əməliyyatlar)
 async function requireSuperAdmin(req, res, next) {
     try {
@@ -454,23 +448,25 @@ app.get('/api/packages', verifyToken, async (req, res) => {
 
 // 2. Add Package
 app.post('/api/packages', verifyToken, async (req, res) => {
-    const { trackingNumber, weight, price } = req.body;
+    const { trackingNumber } = req.body;
+    const weight = parseFloat(req.body.weight);
+    const price = parseFloat(req.body.price);
 
     if (!trackingNumber || !trackingNumber.trim()) {
         return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
     }
-    if (hasNegativeNumber(weight)) {
-        return res.status(400).json({ message: "Çəki mənfi ola bilməz!" });
+    if (isNaN(weight) || weight < 0) {
+        return res.status(400).json({ message: "Çəki düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
-    if (hasNegativeNumber(price)) {
-        return res.status(400).json({ message: "Qiymət mənfi ola bilməz!" });
+    if (isNaN(price) || price < 0) {
+        return res.status(400).json({ message: "Qiymət düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
 
     try {
         await pool.request()
             .input('trackingNumber', sql.NVarChar, trackingNumber)
-            .input('weight', sql.NVarChar, weight)
-            .input('price', sql.NVarChar, price)
+            .input('weight', sql.Decimal(10, 2), weight)
+            .input('price', sql.Decimal(10, 2), price)
             .input('status', sql.NVarChar, 'Bəyan edildi')
             .input('userId', sql.Int, req.user.id)
             .query(`
@@ -486,16 +482,18 @@ app.post('/api/packages', verifyToken, async (req, res) => {
 // 3. Update Package
 app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
-    const { trackingNumber, weight, price, status } = req.body;
+    const { trackingNumber, status } = req.body;
+    const weight = parseFloat(req.body.weight);
+    const price = parseFloat(req.body.price);
 
     if (!trackingNumber || !trackingNumber.trim()) {
         return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
     }
-    if (hasNegativeNumber(weight)) {
-        return res.status(400).json({ message: "Çəki mənfi ola bilməz!" });
+    if (isNaN(weight) || weight < 0) {
+        return res.status(400).json({ message: "Çəki düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
-    if (hasNegativeNumber(price)) {
-        return res.status(400).json({ message: "Qiymət mənfi ola bilməz!" });
+    if (isNaN(price) || price < 0) {
+        return res.status(400).json({ message: "Qiymət düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
 
     const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
@@ -504,8 +502,8 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
         const request = pool.request()
             .input('id', sql.Int, id)
             .input('trackingNumber', sql.NVarChar, trackingNumber)
-            .input('weight', sql.NVarChar, weight)
-            .input('price', sql.NVarChar, price)
+            .input('weight', sql.Decimal(10, 2), weight)
+            .input('price', sql.Decimal(10, 2), price)
             .input('status', sql.NVarChar, status);
 
         let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status WHERE id = @id';
@@ -1034,6 +1032,106 @@ app.delete('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) =>
 
         await pool.request().input('id', sql.Int, id).query('DELETE FROM Roles WHERE id = @id');
         res.json({ message: "Rol uğurla silindi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🏭 ANBARLAR (WAREHOUSES)
+// ==========================================
+
+// 1. Bütün aktiv anbarların siyahısı (hər daxil olmuş istifadəçi görə bilər)
+app.get('/api/warehouses', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT * FROM Warehouses WHERE isActive = 1 ORDER BY id
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Yeni Anbar Yarat
+app.post('/api/warehouses', verifyToken, requirePermission('warehouses.manage'), async (req, res) => {
+    const { name, country, flag, addressLine1, addressLine2, city, postalCode, phone, ratePerKg } = req.body;
+
+    if (!name || !name.trim() || !country || !country.trim() || !addressLine1 || !addressLine1.trim()) {
+        return res.status(400).json({ message: "Anbar adı, ölkə və ünvan qeyd edilməlidir!" });
+    }
+    const rate = parseFloat(ratePerKg);
+    if (isNaN(rate) || rate < 0) {
+        return res.status(400).json({ message: "Kq başına tarif düzgün, mənfi olmayan rəqəm olmalıdır!" });
+    }
+
+    try {
+        await pool.request()
+            .input('name', sql.NVarChar, name.trim())
+            .input('country', sql.NVarChar, country.trim())
+            .input('flag', sql.NVarChar, flag || null)
+            .input('addressLine1', sql.NVarChar, addressLine1.trim())
+            .input('addressLine2', sql.NVarChar, addressLine2 || null)
+            .input('city', sql.NVarChar, city || null)
+            .input('postalCode', sql.NVarChar, postalCode || null)
+            .input('phone', sql.NVarChar, phone || null)
+            .input('ratePerKg', sql.Decimal(10, 2), rate)
+            .query(`
+                INSERT INTO Warehouses (name, country, flag, addressLine1, addressLine2, city, postalCode, phone, ratePerKg, isActive)
+                VALUES (@name, @country, @flag, @addressLine1, @addressLine2, @city, @postalCode, @phone, @ratePerKg, 1)
+            `);
+        res.status(201).json({ message: "Anbar uğurla yaradıldı!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Anbarı Yenilə
+app.put('/api/warehouses/:id', verifyToken, requirePermission('warehouses.manage'), async (req, res) => {
+    const { id } = req.params;
+    const { name, country, flag, addressLine1, addressLine2, city, postalCode, phone, ratePerKg, isActive } = req.body;
+
+    if (!name || !name.trim() || !country || !country.trim() || !addressLine1 || !addressLine1.trim()) {
+        return res.status(400).json({ message: "Anbar adı, ölkə və ünvan qeyd edilməlidir!" });
+    }
+    const rate = parseFloat(ratePerKg);
+    if (isNaN(rate) || rate < 0) {
+        return res.status(400).json({ message: "Kq başına tarif düzgün, mənfi olmayan rəqəm olmalıdır!" });
+    }
+
+    try {
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('name', sql.NVarChar, name.trim())
+            .input('country', sql.NVarChar, country.trim())
+            .input('flag', sql.NVarChar, flag || null)
+            .input('addressLine1', sql.NVarChar, addressLine1.trim())
+            .input('addressLine2', sql.NVarChar, addressLine2 || null)
+            .input('city', sql.NVarChar, city || null)
+            .input('postalCode', sql.NVarChar, postalCode || null)
+            .input('phone', sql.NVarChar, phone || null)
+            .input('ratePerKg', sql.Decimal(10, 2), rate)
+            .input('isActive', sql.Bit, isActive === false ? 0 : 1)
+            .query(`
+                UPDATE Warehouses SET
+                    name = @name, country = @country, flag = @flag,
+                    addressLine1 = @addressLine1, addressLine2 = @addressLine2,
+                    city = @city, postalCode = @postalCode, phone = @phone,
+                    ratePerKg = @ratePerKg, isActive = @isActive
+                WHERE id = @id
+            `);
+        res.json({ message: "Anbar uğurla yeniləndi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Anbarı Sil
+app.delete('/api/warehouses/:id', verifyToken, requirePermission('warehouses.manage'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.request().input('id', sql.Int, id).query('DELETE FROM Warehouses WHERE id = @id');
+        res.json({ message: "Anbar uğurla silindi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
