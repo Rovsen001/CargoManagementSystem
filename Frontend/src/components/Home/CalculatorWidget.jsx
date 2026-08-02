@@ -1,9 +1,11 @@
 // frontend/src/components/Home/CalculatorWidget.jsx
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, TextInput, Button, Select, Text, Alert } from '@gravity-ui/uikit';
 import { Calculator } from '@gravity-ui/icons';
 
 const CalculatorWidget = () => {
+    const { t } = useTranslation();
     const [country, setCountry] = useState(['turkey']);
     const [weight, setWeight] = useState('');
     const [dimensions, setDimensions] = useState({ length: '', width: '', height: '' });
@@ -19,7 +21,7 @@ const CalculatorWidget = () => {
 
         if (w < 0 || l < 0 || width < 0 || h < 0) {
             setResult(null);
-            setError('Çəki və ölçülər mənfi ola bilməz.');
+            setError(t('calculator.negativeError'));
             return;
         }
 
@@ -50,27 +52,27 @@ const CalculatorWidget = () => {
             }}
         >
             <div style={{ marginBottom: '16px' }}>
-                <Text variant="header-2" style={{ color: '#ffffff' }}>Çatdırılma Kalkulyatoru</Text>
+                <Text variant="header-2" style={{ color: '#ffffff' }}>{t('calculator.title')}</Text>
                 <Text variant="body-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                    Bağlamanızın təxmini daşınma xərcini hesablayın
+                    {t('calculator.subtitle')}
                 </Text>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
-                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>Ölkə</Text>
+                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>{t('calculator.country')}</Text>
                     <Select
                         size="l"
                         value={country}
                         onUpdate={setCountry}
                         width="max"
                     >
-                        <Select.Option value="turkey">🇹🇷 Türkiyə ($4.50/kq)</Select.Option>
-                        <Select.Option value="usa">🇺🇸 ABŞ ($7.50/kq)</Select.Option>
+                        <Select.Option value="turkey">{t('calculator.turkey')}</Select.Option>
+                        <Select.Option value="usa">{t('calculator.usa')}</Select.Option>
                     </Select>
                 </div>
                 <div>
-                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>Çəki (kq)</Text>
+                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>{t('calculator.weight')}</Text>
                     <TextInput
                         size="l"
                         type="number"
@@ -84,7 +86,7 @@ const CalculatorWidget = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '16px' }}>
                 <div>
-                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>Uzunluq (sm)</Text>
+                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>{t('calculator.length')}</Text>
                     <TextInput
                         size="m"
                         type="number"
@@ -95,7 +97,7 @@ const CalculatorWidget = () => {
                     />
                 </div>
                 <div>
-                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>En (sm)</Text>
+                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>{t('calculator.width')}</Text>
                     <TextInput
                         size="m"
                         type="number"
@@ -106,7 +108,7 @@ const CalculatorWidget = () => {
                     />
                 </div>
                 <div>
-                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>Hündürlük (sm)</Text>
+                    <Text variant="caption-2" color="secondary" style={{ marginBottom: '2px', display: 'block' }}>{t('calculator.height')}</Text>
                     <TextInput
                         size="m"
                         type="number"
@@ -120,20 +122,20 @@ const CalculatorWidget = () => {
 
             <Button size="l" view="action" width="max" onClick={calculatePrice} disabled={!weight}>
                 <Button.Icon><Calculator /></Button.Icon>
-                Hesabla
+                {t('calculator.calculate')}
             </Button>
 
             {error && (
                 <div style={{ marginTop: '16px' }}>
-                    <Alert theme="danger" title="Xəta" message={error} />
+                    <Alert theme="danger" title={t('calculator.errorTitle')} message={error} />
                 </div>
             )}
 
             {result && (
                 <div style={{ marginTop: '16px' }}>
-                    <Alert theme="success" title="Hesablama Nəticəsi" layout="horizontal">
+                    <Alert theme="success" title={t('calculator.resultTitle')} layout="horizontal">
                         <Text variant="body-2">
-                            Hesablanan Çəki: <strong>{result.weight} kq</strong> | Məbləğ: <strong>${result.price}</strong>
+                            {t('calculator.calculatedWeight')}: <strong>{result.weight} kq</strong> | {t('calculator.amount')}: <strong>${result.price}</strong>
                         </Text>
                     </Alert>
                 </div>

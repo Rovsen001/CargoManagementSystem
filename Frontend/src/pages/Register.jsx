@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, TextInput, Button } from '@gravity-ui/uikit';
 import api from '../services/api';
 
 const Register = ({ switchToLogin }) => {
+    const { t } = useTranslation();
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
@@ -20,17 +22,17 @@ const Register = ({ switchToLogin }) => {
 
         // Frontend tərəfində ilk yoxlama
         if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-            setError('Zəhmət olmasa bütün xanaları doldurun!');
+            setError(t('auth.fillAllFields'));
             return;
         }
 
         if (password.length < 6) {
-            setError('Şifrə ən azı 6 simvoldan ibarət olmalıdır!');
+            setError(t('auth.passwordTooShort'));
             return;
         }
 
         if (password !== confirmPassword) {
-            setError('Şifrələr bir-biri ilə üst-üstə düşmür!');
+            setError(t('auth.passwordsMismatch'));
             return;
         }
 
@@ -45,13 +47,13 @@ const Register = ({ switchToLogin }) => {
                 confirmPassword
             });
 
-            setSuccessMsg('Qeydiyyat uğurludur! Girişə yönləndirilirsiniz...');
+            setSuccessMsg(t('auth.registerSuccess'));
             setTimeout(() => {
                 switchToLogin();
             }, 1500);
 
         } catch (err) {
-            setError(err.response?.data?.message || 'Qeydiyyat xətası baş verdi!');
+            setError(err.response?.data?.message || t('auth.registerError'));
         } finally {
             setLoading(false);
         }
@@ -76,9 +78,9 @@ const Register = ({ switchToLogin }) => {
             >
 
                 <div>
-                    <Text variant="header-2" className="gradient-text">Hesab Yarat</Text>
+                    <Text variant="header-2" className="gradient-text">{t('auth.registerTitle')}</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                        CargoMS sisteminə qoşulmaq üçün məlumatlarınızı daxil edin.
+                        {t('auth.registerSubtitle')}
                     </Text>
                 </div>
 
@@ -99,7 +101,7 @@ const Register = ({ switchToLogin }) => {
                     {/* Ad və Soyad (Yan-yana) */}
                     <div style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1 }}>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Ad *</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.firstName')} *</Text>
                             <TextInput
                                 placeholder="Əli"
                                 value={firstName}
@@ -108,7 +110,7 @@ const Register = ({ switchToLogin }) => {
                             />
                         </div>
                         <div style={{ flex: 1 }}>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Soyad *</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.lastName')} *</Text>
                             <TextInput
                                 placeholder="Əliyev"
                                 value={lastName}
@@ -119,7 +121,7 @@ const Register = ({ switchToLogin }) => {
                     </div>
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Email *</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.email')} *</Text>
                         <TextInput
                             type="email"
                             placeholder="example@mail.com"
@@ -130,7 +132,7 @@ const Register = ({ switchToLogin }) => {
                     </div>
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Şifrə *</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.password')} *</Text>
                         <TextInput
                             type="password"
                             placeholder="••••••••"
@@ -141,7 +143,7 @@ const Register = ({ switchToLogin }) => {
                     </div>
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Şifrə Təkrarı *</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.confirmPassword')} *</Text>
                         <TextInput
                             type="password"
                             placeholder="••••••••"
@@ -159,18 +161,18 @@ const Register = ({ switchToLogin }) => {
                         className="pill-btn"
                         style={{ marginTop: '8px', background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                     >
-                        Qeydiyyatdan Keç
+                        {t('auth.registerBtn')}
                     </Button>
                 </form>
 
                 <div style={{ textAlign: 'center', marginTop: '10px' }}>
                     <Text variant="body-1" color="secondary">
-                        Hesabınız var?{' '}
+                        {t('auth.haveAccount')}{' '}
                         <span
                             onClick={switchToLogin}
                             style={{ color: '#a78bfa', cursor: 'pointer', fontWeight: 'bold' }}
                         >
-                            Daxil olun
+                            {t('auth.logIn')}
                         </span>
                     </Text>
                 </div>

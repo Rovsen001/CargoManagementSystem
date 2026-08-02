@@ -1,10 +1,12 @@
 // Frontend/src/components/Home/CustomerHome.jsx
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, Button, Avatar, Label, Loader } from '@gravity-ui/uikit';
 import { Box, Plus, Wallet, ArrowRight, ShieldCheck } from '@gravity-ui/icons';
 import api from '../../services/api';
 
 const CustomerHome = ({ user, onNavigate }) => {
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [activePackages, setActivePackages] = useState([]);
     const [archivedCount, setArchivedCount] = useState(0);
@@ -77,12 +79,12 @@ const CustomerHome = ({ user, onNavigate }) => {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <Text variant="header-2" style={{ color: '#ffffff' }}>
-                                Xoş gəldiniz, {user.firstName || user.fullName || 'Müştəri'}!
+                                {t('customerHome.welcome')}, {user.firstName || user.fullName || t('customerHome.defaultName')}!
                             </Text>
-                            <Label theme="info" size="m">Müştəri Portalı</Label>
+                            <Label theme="info" size="m">{t('customerHome.portal')}</Label>
                         </div>
                         <Text variant="body-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                            Müştəri Kodu: <strong style={{ color: '#58a6ff' }}>#C-{user.id ? user.id + 10400 : '10492'}</strong> | Hesab Statusu: <span style={{ color: '#56d364' }}>Aktiv</span>
+                            {t('customerHome.customerCode')}: <strong style={{ color: '#58a6ff' }}>#C-{user.id ? user.id + 10400 : '10492'}</strong> | {t('customerHome.accountStatus')}: <span style={{ color: '#56d364' }}>{t('customerHome.active')}</span>
                         </Text>
                     </div>
                 </div>
@@ -94,7 +96,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                         onClick={() => onNavigate && onNavigate('packages')}
                     >
                         <Button.Icon><Plus /></Button.Icon>
-                        Yeni Bağlama Bəyan Et
+                        {t('customerHome.declareNew')}
                     </Button>
                     <Button
                         size="l"
@@ -102,7 +104,7 @@ const CustomerHome = ({ user, onNavigate }) => {
                         onClick={() => onNavigate && onNavigate('finance')}
                     >
                         <Button.Icon><Wallet /></Button.Icon>
-                        Balansı Artır
+                        {t('customerHome.topUp')}
                     </Button>
                 </div>
             </Card>
@@ -111,53 +113,53 @@ const CustomerHome = ({ user, onNavigate }) => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                 <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Aktiv Bağlamalar</Text>
+                        <Text variant="body-1" color="secondary">{t('customerHome.activePackages')}</Text>
                         <Box style={{ color: '#1f6feb' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        {activePackages.length} Bağlama
+                        {activePackages.length} {t('customerHome.packagesUnit')}
                     </Text>
                     <Text variant="caption-2" style={{ color: '#58a6ff', marginTop: '4px', display: 'block' }}>
-                        {onTheWayCount} yoldadır, {arrivedCount} anbardadır
+                        {t('customerHome.onTheWayAndWarehouse', { onTheWay: onTheWayCount, arrived: arrivedCount })}
                     </Text>
                 </Card>
 
                 <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Cari Balans</Text>
+                        <Text variant="body-1" color="secondary">{t('customerHome.currentBalance')}</Text>
                         <Wallet style={{ color: '#56d364' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#56d364', marginTop: '12px', display: 'block' }}>
                         ₼ {parseFloat(balance).toFixed(2)}
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                        Maliyyə səhifəsindən artırın
+                        {t('customerHome.topUpFromFinance')}
                     </Text>
                 </Card>
 
                 <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Təhvil Alınacaq</Text>
+                        <Text variant="body-1" color="secondary">{t('customerHome.toBeReceived')}</Text>
                         <Box style={{ color: '#e3b341' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
-                        {arrivedCount} Bağlama
+                        {arrivedCount} {t('customerHome.packagesUnit')}
                     </Text>
                     <Text variant="caption-2" style={{ color: '#e3b341', marginTop: '4px', display: 'block' }}>
-                        Bakı Baş Anbarı
+                        {t('customerHome.mainWarehouse')}
                     </Text>
                 </Card>
 
                 <Card view="outlined" className="hover-lift" style={{ padding: '20px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text variant="body-1" color="secondary">Tamamlanmış Bağlamalar</Text>
+                        <Text variant="body-1" color="secondary">{t('customerHome.completedPackages')}</Text>
                         <ShieldCheck style={{ color: '#a371f7' }} size={22} />
                     </div>
                     <Text variant="header-3" style={{ color: '#ffffff', marginTop: '12px', display: 'block' }}>
                         {archivedCount}
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px', display: 'block' }}>
-                        Arxivlənmiş bağlamalar
+                        {t('customerHome.archivedPackages')}
                     </Text>
                 </Card>
             </div>
@@ -166,13 +168,13 @@ const CustomerHome = ({ user, onNavigate }) => {
             <Card view="outlined" style={{ padding: '24px', backgroundColor: '#161b22', borderColor: '#30363d' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <div>
-                        <Text variant="header-2" style={{ color: '#ffffff' }}>Son Bağlamalarınız</Text>
+                        <Text variant="header-2" style={{ color: '#ffffff' }}>{t('customerHome.recentPackages')}</Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '2px' }}>
-                            Son bəyan edilən və yolda olan bağlamalarınızın cari vəziyyəti
+                            {t('customerHome.recentPackagesDesc')}
                         </Text>
                     </div>
                     <Button view="flat-info" onClick={() => onNavigate && onNavigate('packages')}>
-                        Hamısına bax <Button.Icon><ArrowRight /></Button.Icon>
+                        {t('customerHome.viewAll')} <Button.Icon><ArrowRight /></Button.Icon>
                     </Button>
                 </div>
 
@@ -189,12 +191,12 @@ const CustomerHome = ({ user, onNavigate }) => {
                         }}>
                             <Text style={{ fontWeight: 600, color: '#f0f6fc' }}>{pkg.trackingNumber}</Text>
                             <Text color="secondary">{pkg.weight != null ? `${parseFloat(pkg.weight).toFixed(2)} kq` : '-'}</Text>
-                            <div><Label theme={statusTheme[pkg.status] || 'normal'}>{pkg.status || 'Təyin edilməyib'}</Label></div>
+                            <div><Label theme={statusTheme[pkg.status] || 'normal'}>{pkg.status || t('tracking.notSet')}</Label></div>
                             <Text style={{ color: '#56d364', fontWeight: 600 }}>{pkg.price != null ? `$${parseFloat(pkg.price).toFixed(2)}` : '-'}</Text>
                         </div>
                     )) : (
                         <Text color="secondary" style={{ padding: '20px 0', textAlign: 'center', display: 'block' }}>
-                            Hələ aktiv bağlamanız yoxdur.
+                            {t('customerHome.noActivePackages')}
                         </Text>
                     )}
                 </div>

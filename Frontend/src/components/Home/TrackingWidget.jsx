@@ -1,16 +1,20 @@
 // frontend/src/components/Home/TrackingWidget.jsx
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, TextInput, Button, Text, Alert, Label, Icon } from '@gravity-ui/uikit';
 import { Magnifier, ShieldCheck } from '@gravity-ui/icons';
 import QRCode from 'qrcode';
 import api from '../../services/api';
 
 const TrackingWidget = () => {
+    const { t, i18n } = useTranslation();
     const [trackingCode, setTrackingCode] = useState('');
     const [packageData, setPackageData] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [qrDataUrl, setQrDataUrl] = useState('');
+
+    const dateLocale = i18n.language === 'en' ? 'en-GB' : 'az-AZ';
 
     const handleTrack = async (e) => {
         e.preventDefault();
@@ -24,7 +28,7 @@ const TrackingWidget = () => {
             const response = await api.get(`/public/track/${trackingCode.trim()}`);
             setPackageData(response.data);
         } catch (err) {
-            setError('Bağlama tapılmadı. Zəhmət olmasa izləmə kodunu düzgün daxil edin.');
+            setError(t('tracking.notFound'));
         } finally {
             setLoading(false);
         }
@@ -55,9 +59,9 @@ const TrackingWidget = () => {
         >
             <div>
                 <div style={{ marginBottom: '16px' }}>
-                    <Text variant="header-2" style={{ color: '#ffffff' }}>Bağlamanı İzləyin</Text>
+                    <Text variant="header-2" style={{ color: '#ffffff' }}>{t('tracking.title')}</Text>
                     <Text variant="body-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                        Real vaxt rejimində bağlamanızın harada olduğunu öyrənin
+                        {t('tracking.subtitle')}
                     </Text>
                 </div>
 
@@ -65,7 +69,7 @@ const TrackingWidget = () => {
                     <div style={{ flexGrow: 1 }}>
                         <TextInput
                             size="l"
-                            placeholder="İzləmə kodu (Məs: TR123456789)"
+                            placeholder={t('tracking.placeholder')}
                             value={trackingCode}
                             onUpdate={(value) => setTrackingCode(value)}
                             hasClear
@@ -81,14 +85,14 @@ const TrackingWidget = () => {
                         <Button.Icon>
                             <Magnifier />
                         </Button.Icon>
-                        Axtar
+                        {t('tracking.search')}
                     </Button>
                 </form>
             </div>
 
             <div style={{ marginTop: '16px' }}>
                 {error && (
-                    <Alert theme="danger" title="Xəta" message={error} />
+                    <Alert theme="danger" title={t('calculator.errorTitle')} message={error} />
                 )}
 
                 {packageData && (
@@ -96,32 +100,32 @@ const TrackingWidget = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                             <div>
                                 <Text variant="subheader-2" style={{ display: 'block', marginBottom: '8px', color: '#ffffff' }}>
-                                    Trek Nömrəsi: <Text color="primary">{packageData.trackingNumber}</Text>
+                                    {t('tracking.trackingNumber')}: <Text color="primary">{packageData.trackingNumber}</Text>
                                 </Text>
                                 <Text variant="body-1" style={{ display: 'block' }}>
-                                    Status: <Text color="positive">{packageData.status || 'Təyin edilməyib'}</Text>
+                                    {t('tracking.status')}: <Text color="positive">{packageData.status || t('tracking.notSet')}</Text>
                                 </Text>
                                 <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                                    Çəki: {packageData.weight != null ? `${parseFloat(packageData.weight).toFixed(2)} kq` : '-'}
+                                    {t('tracking.weight')}: {packageData.weight != null ? `${parseFloat(packageData.weight).toFixed(2)} kq` : '-'}
                                 </Text>
                                 <Text variant="body-1" color="secondary" style={{ display: 'block' }}>
-                                    Qiymət: {packageData.price != null ? `$${parseFloat(packageData.price).toFixed(2)}` : '-'}
+                                    {t('tracking.price')}: {packageData.price != null ? `$${parseFloat(packageData.price).toFixed(2)}` : '-'}
                                 </Text>
                                 {packageData.isInsured && (
                                     <Label theme="success" icon={<Icon data={ShieldCheck} size={14} />} style={{ marginTop: '6px' }}>
-                                        Sığortalı (${parseFloat(packageData.declaredValue).toFixed(2)})
+                                        {t('tracking.insured')} (${parseFloat(packageData.declaredValue).toFixed(2)})
                                     </Label>
                                 )}
                             </div>
                             {qrDataUrl && (
-                                <img src={qrDataUrl} alt="QR kod" width={72} height={72} style={{ background: '#fff', padding: '4px', borderRadius: '6px', flexShrink: 0 }} />
+                                <img src={qrDataUrl} alt="QR" width={72} height={72} style={{ background: '#fff', padding: '4px', borderRadius: '6px', flexShrink: 0 }} />
                             )}
                         </div>
 
                         {packageData.history && packageData.history.length > 0 && (
                             <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #21262d' }}>
                                 <Text variant="caption-2" color="secondary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
-                                    Bağlama Tarixçəsi
+                                    {t('tracking.history')}
                                 </Text>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     {packageData.history.map((h, idx) => (
@@ -135,7 +139,7 @@ const TrackingWidget = () => {
                                                 {h.status}
                                             </Text>
                                             <Text variant="caption-2" color="secondary" style={{ marginLeft: 'auto' }}>
-                                                {new Date(h.changedAt).toLocaleString('az-AZ', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(h.changedAt).toLocaleString(dateLocale, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                             </Text>
                                         </div>
                                     ))}

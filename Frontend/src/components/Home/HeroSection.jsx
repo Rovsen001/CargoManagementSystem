@@ -1,10 +1,12 @@
 // Frontend/src/components/Home/HeroSection.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, Button, Label } from '@gravity-ui/uikit';
 import { Box, ArrowRight, ShieldCheck, Clock, Globe, Rocket } from '@gravity-ui/icons';
 import Hero3D from './Hero3D';
 
 const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
+    const { t } = useTranslation();
     return (
         <div
             style={{
@@ -28,7 +30,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                 <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div>
                         <Label theme="info" size="m" style={{ marginBottom: '12px', backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
-                            Sürətli & Etibarlı Kargo Xidməti
+                            {t('hero.badge')}
                         </Label>
                         <Text
                             variant="display-1"
@@ -41,13 +43,12 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                                 fontSize: '42px'
                             }}
                         >
-                            Dünyadan Qapınıza Xəyal Etdiyiniz Sürətlə
+                            {t('hero.title')}
                         </Text>
                     </div>
 
                     <Text variant="body-2" color="secondary" style={{ fontSize: '15px', lineHeight: 1.6 }}>
-                        CargoMS ilə Türkiyə, ABŞ və Avropadan olan sifarişlərinizi real vaxtda izləyin,
-                        çatdırılma xərclərini dərhal hesablayın və anbarlarımızdan maneəsiz təhvil alın.
+                        {t('hero.subtitle')}
                     </Text>
 
                     <div style={{ display: 'flex', gap: '14px', marginTop: '8px' }}>
@@ -63,7 +64,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                                 border: 'none'
                             }}
                         >
-                            Hesab Yarat <Button.Icon><ArrowRight /></Button.Icon>
+                            {t('hero.createAccount')} <Button.Icon><ArrowRight /></Button.Icon>
                         </Button>
                         <Button
                             size="xl"
@@ -72,7 +73,7 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                             className="pill-btn"
                             style={{ padding: '0 28px' }}
                         >
-                            Daxil Ol
+                            {t('hero.login')}
                         </Button>
                     </div>
 
@@ -80,15 +81,15 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                     <div style={{ display: 'flex', gap: '20px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #241a33' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Clock style={{ color: '#56d364' }} />
-                            <Text variant="caption-2" color="secondary">24/7 Dəstək & İzləmə</Text>
+                            <Text variant="caption-2" color="secondary">{t('hero.feature247')}</Text>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <ShieldCheck style={{ color: '#a78bfa' }} />
-                            <Text variant="caption-2" color="secondary">Sığortalı Çatdırılma</Text>
+                            <Text variant="caption-2" color="secondary">{t('hero.featureInsured')}</Text>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Globe style={{ color: '#e3b341' }} />
-                            <Text variant="caption-2" color="secondary">Qlobal Şəbəkə</Text>
+                            <Text variant="caption-2" color="secondary">{t('hero.featureGlobal')}</Text>
                         </div>
                     </div>
                 </div>
@@ -108,10 +109,10 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                     >
                         <Box size={28} style={{ color: '#a78bfa', marginBottom: '12px' }} />
                         <Text variant="subheader-2" style={{ display: 'block', color: '#ffffff', marginBottom: '6px' }}>
-                            Ağıllı Anbar
+                            {t('hero.card1Title')}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ fontSize: '13px' }}>
-                            Bütün bağlamalarınız xarici anbara daxil olan kimi avtomatik bəyan edilir.
+                            {t('hero.card1Desc')}
                         </Text>
                     </Card>
 
@@ -129,10 +130,10 @@ const HeroSection = ({ onNavigateLogin, onNavigateRegister }) => {
                     >
                         <Rocket size={28} style={{ color: '#2ea043', marginBottom: '12px' }} />
                         <Text variant="subheader-2" style={{ display: 'block', color: '#ffffff', marginBottom: '6px' }}>
-                            Ekspress Uçuşlar
+                            {t('hero.card2Title')}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ fontSize: '13px' }}>
-                            Həftədə 5 dəfə müntəzəm avia-reyslər vasitəsilə 2-4 iş gününə çatdırılma.
+                            {t('hero.card2Desc')}
                         </Text>
                     </Card>
                 </div>

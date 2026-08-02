@@ -34,6 +34,7 @@ function App() {
 
     // Balance state synced for Header Navbar
     const [userBalance, setUserBalance] = useState(45.50);
+    const [paymentNotice, setPaymentNotice] = useState(null); // { type: 'success' | 'cancelled' }
 
     // Modals
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -68,6 +69,23 @@ function App() {
             setResetToken(tokenFromUrl);
             setAuthMode('reset');
             window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        const paymentStatus = params.get('payment');
+        if (paymentStatus === 'success' || paymentStatus === 'cancelled') {
+            setPaymentNotice({ type: paymentStatus });
+            window.history.replaceState({}, '', window.location.pathname);
+
+            if (paymentStatus === 'success' && savedUser) {
+                api.get('/finance/my-balance').then((res) => {
+                    const newBalance = res.data.balance || 0;
+                    setUserBalance(newBalance);
+                    const parsed = JSON.parse(savedUser);
+                    const updated = { ...parsed, balance: newBalance };
+                    localStorage.setItem('user', JSON.stringify(updated));
+                    setUser(updated);
+                }).catch((err) => console.error("Balans yenilənərkən xəta:", err));
+            }
         }
     }, []);
 
@@ -375,6 +393,21 @@ function App() {
 
                     {/* CONTENT BODY */}
                     <main style={{ flex: 1, padding: '32px 24px', overflowY: 'auto' }}>
+                        {paymentNotice && (
+                            <div style={{
+                                marginBottom: '20px', padding: '14px 18px', borderRadius: '10px',
+                                backgroundColor: paymentNotice.type === 'success' ? '#13231b' : '#3d1618',
+                                border: `1px solid ${paymentNotice.type === 'success' ? '#2ea043' : '#f85149'}`,
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                            }}>
+                                <Text style={{ color: paymentNotice.type === 'success' ? '#56d364' : '#ff7b72' }}>
+                                    {paymentNotice.type === 'success'
+                                        ? 'Ödəniş uğurla tamamlandı! Balansınız yeniləndi.'
+                                        : 'Ödəniş ləğv edildi.'}
+                                </Text>
+                                <Button size="s" view="flat" onClick={() => setPaymentNotice(null)}>Bağla</Button>
+                            </div>
+                        )}
                         {user ? (
                             <>
                                 {activePage === 'home' && (

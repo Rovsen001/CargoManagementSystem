@@ -1438,6 +1438,10 @@ app.get('/api/finance/my-balance', verifyToken, async (req, res) => {
 
 // 2. Balans Artırmaq
 app.post('/api/finance/top-up', verifyToken, async (req, res) => {
+    if (stripe) {
+        return res.status(400).json({ message: "Bu üsul artıq deaktivdir. Real ödəniş sistemi (Stripe) istifadə olunur." });
+    }
+
     const userId = req.user.id;
     const amount = parseFloat(req.body.amount);
 
@@ -1457,14 +1461,53 @@ app.post('/api/finance/top-up', verifyToken, async (req, res) => {
             .input('userId', sql.Int, userId)
             .input('amount', sql.Decimal(10, 2), amount)
             .input('type', sql.VarChar(10), 'inkam')
-            .input('description', sql.NVarChar(255), 'Balans artırılması')
+            .input('description', sql.NVarChar(255), 'Balans artırılması (demo)')
             .query(`
-                INSERT INTO transactions (user_id, amount, type, description) 
+                INSERT INTO transactions (user_id, amount, type, description)
                 VALUES (@userId, @amount, @type, @description)
             `);
 
         res.json({ message: "Balans uğurla artırıldı!" });
 
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Ödəniş Sisteminin Konfiqurasiya Vəziyyəti (frontend hansı axını göstərəcəyini bunun əsasında seçir)
+app.get('/api/finance/payment-config', verifyToken, (req, res) => {
+    res.json({ stripeEnabled: Boolean(stripe) });
+});
+
+// 4. Stripe Checkout Sessiyası Yarat (real kart ödənişi)
+app.post('/api/finance/create-checkout-session', verifyToken, async (req, res) => {
+    if (!stripe) {
+        return res.status(400).json({ message: "Ödəniş sistemi konfiqurasiya edilməyib." });
+    }
+
+    const amount = parseFloat(req.body.amount);
+    if (!amount || isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Düzgün məbləğ daxil edin" });
+    }
+
+    try {
+        const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            payment_method_types: ['card'],
+            client_reference_id: String(req.user.id),
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: { name: 'CargoMS Balans Artırılması' },
+                    unit_amount: Math.round(amount * 100)
+                },
+                quantity: 1
+            }],
+            success_url: `${process.env.FRONTEND_URL}?payment=success`,
+            cancel_url: `${process.env.FRONTEND_URL}?payment=cancelled`
+        });
+
+        res.json({ url: session.url });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

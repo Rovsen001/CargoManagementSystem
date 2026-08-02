@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, TextInput, Button } from '@gravity-ui/uikit';
 import api from '../services/api';
 
 const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => {
+    const { t } = useTranslation();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -32,7 +34,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
 
             onLoginSuccess(response.data.user);
         } catch (err) {
-            setError(err.response?.data?.message || 'Giriş zamanı xəta baş verdi!');
+            setError(err.response?.data?.message || t('auth.loginError'));
         } finally {
             setLoading(false);
         }
@@ -51,7 +53,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
 
             onLoginSuccess(response.data.user);
         } catch (err) {
-            setError(err.response?.data?.message || 'Doğrulama zamanı xəta baş verdi!');
+            setError(err.response?.data?.message || t('auth.verifyError'));
         } finally {
             setLoading(false);
         }
@@ -77,10 +79,10 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
 
                 <div>
                     <Text variant="header-2" className="gradient-text">
-                        {awaiting2FA ? 'Doğrulama Kodu' : 'Xoş gəlmisiniz'}
+                        {awaiting2FA ? t('auth.twoFATitle') : t('auth.welcomeTitle')}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                        {awaiting2FA ? 'Autentifikasiya tətbiqinizdəki 6 rəqəmli kodu daxil edin.' : 'Davam etmək üçün hesabınıza daxil olun.'}
+                        {awaiting2FA ? t('auth.twoFASubtitle') : t('auth.welcomeSubtitle')}
                     </Text>
                 </div>
 
@@ -93,7 +95,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                 {awaiting2FA ? (
                     <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Doğrulama Kodu</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.twoFACode')}</Text>
                             <TextInput
                                 placeholder="000000"
                                 value={twoFACode}
@@ -110,16 +112,16 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                             className="pill-btn"
                             style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                         >
-                            Təsdiqlə
+                            {t('auth.confirm')}
                         </Button>
                         <Button view="flat" onClick={() => { setAwaiting2FA(false); setTwoFACode(''); setError(''); }}>
-                            Geri
+                            {t('auth.back')}
                         </Button>
                     </form>
                 ) : (
                 <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Email</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.email')}</Text>
                         <TextInput
                             type="email"
                             placeholder="example@mail.com"
@@ -130,7 +132,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                     </div>
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Şifrə</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.password')}</Text>
                         <TextInput
                             type="password"
                             placeholder="••••••••"
@@ -143,7 +145,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                                 onClick={switchToForgotPassword}
                                 style={{ color: '#a78bfa', cursor: 'pointer', fontSize: '13px' }}
                             >
-                                Şifrəni unutdum?
+                                {t('auth.forgotPassword')}
                             </span>
                         </div>
                     </div>
@@ -156,7 +158,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                         className="pill-btn"
                         style={{ marginTop: '8px', background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                     >
-                        Daxil ol
+                        {t('auth.loginBtn')}
                     </Button>
                 </form>
                 )}
@@ -164,12 +166,12 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                 {!awaiting2FA && (
                 <div style={{ textAlign: 'center', marginTop: '10px' }}>
                     <Text variant="body-1" color="secondary">
-                        Hesabınız yoxdur?{' '}
+                        {t('auth.noAccount')}{' '}
                         <span
                             onClick={switchToRegister}
                             style={{ color: '#a78bfa', cursor: 'pointer', fontWeight: 'bold' }}
                         >
-                            Qeydiyyatdan keçin
+                            {t('auth.signUp')}
                         </span>
                     </Text>
                 </div>

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, TextInput, Button } from '@gravity-ui/uikit';
 import api from '../services/api';
 
 const ResetPassword = ({ token, switchToLogin }) => {
+    const { t } = useTranslation();
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -14,12 +16,12 @@ const ResetPassword = ({ token, switchToLogin }) => {
         setError('');
 
         if (newPassword.length < 6) {
-            setError('Şifrə ən azı 6 simvoldan ibarət olmalıdır!');
+            setError(t('auth.passwordTooShort'));
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setError('Şifrələr bir-biri ilə üst-üstə düşmür!');
+            setError(t('auth.passwordsMismatch'));
             return;
         }
 
@@ -28,7 +30,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
             await api.post('/auth/reset-password', { token, newPassword });
             setSuccess(true);
         } catch (err) {
-            setError(err.response?.data?.message || 'Şifrə yenilənərkən xəta baş verdi.');
+            setError(err.response?.data?.message || t('auth.resetError'));
         } finally {
             setLoading(false);
         }
@@ -52,9 +54,9 @@ const ResetPassword = ({ token, switchToLogin }) => {
                 }}
             >
                 <div>
-                    <Text variant="header-2" className="gradient-text">Yeni Şifrə Təyin Et</Text>
+                    <Text variant="header-2" className="gradient-text">{t('auth.resetTitle')}</Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                        Hesabınız üçün yeni şifrə daxil edin.
+                        {t('auth.resetSubtitle')}
                     </Text>
                 </div>
 
@@ -67,7 +69,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
                 {success ? (
                     <>
                         <div style={{ padding: '12px', backgroundColor: '#13231b', color: '#56d364', border: '1px solid #2ea043', borderRadius: '6px', fontSize: '14px' }}>
-                            Şifrəniz uğurla yeniləndi! İndi yeni şifrənizlə daxil ola bilərsiniz.
+                            {t('auth.resetSuccess')}
                         </div>
                         <Button
                             view="action"
@@ -76,13 +78,13 @@ const ResetPassword = ({ token, switchToLogin }) => {
                             className="pill-btn"
                             style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                         >
-                            Girişə keç
+                            {t('auth.goToLogin')}
                         </Button>
                     </>
                 ) : (
                     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Yeni Şifrə</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.newPassword')}</Text>
                             <TextInput
                                 type="password"
                                 placeholder="••••••••"
@@ -93,7 +95,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
                         </div>
 
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Yeni Şifrə Təkrarı</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('auth.newPasswordConfirm')}</Text>
                             <TextInput
                                 type="password"
                                 placeholder="••••••••"
@@ -111,7 +113,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
                             className="pill-btn"
                             style={{ marginTop: '8px', background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                         >
-                            Şifrəni Yenilə
+                            {t('auth.resetBtn')}
                         </Button>
                     </form>
                 )}
@@ -123,7 +125,7 @@ const ResetPassword = ({ token, switchToLogin }) => {
                                 onClick={switchToLogin}
                                 style={{ color: '#a78bfa', cursor: 'pointer', fontWeight: 'bold' }}
                             >
-                                Girişə qayıt
+                                {t('auth.backToLogin')}
                             </span>
                         </Text>
                     </div>

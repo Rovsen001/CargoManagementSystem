@@ -1,8 +1,10 @@
 // Frontend/src/components/Navigation/Navbar.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button, Text, Avatar, Label, Icon } from '@gravity-ui/uikit';
 import { Box, Wallet, Plus, Gear, ArrowRightFromSquare, Globe } from '@gravity-ui/icons';
 import NotificationBell from './NotificationBell';
+import LanguageSwitcher from './LanguageSwitcher';
 
 const Navbar = ({
     user,
@@ -14,6 +16,7 @@ const Navbar = ({
     onOpenProfile,
     balance
 }) => {
+    const { t } = useTranslation();
     const getUserInitials = () => {
         if (!user) return 'U';
         if (user.firstName && user.lastName) {
@@ -54,7 +57,7 @@ const Navbar = ({
                         CargoMS
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ display: 'block', fontSize: '11px' }}>
-                        Beynəlxalq Kargo & Logistika
+                        {t('nav.tagline')}
                     </Text>
                 </div>
             </div>
@@ -66,7 +69,7 @@ const Navbar = ({
                     size="l"
                     onClick={() => onNavigate('home')}
                 >
-                    Ana Səhifə
+                    {t('nav.home')}
                 </Button>
 
                 {user && (
@@ -76,28 +79,28 @@ const Navbar = ({
                             size="l"
                             onClick={() => onNavigate('packages')}
                         >
-                            Bağlamalarım
+                            {t('nav.packages')}
                         </Button>
                         <Button
                             view={activePage === 'finance' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('finance')}
                         >
-                            Maliyyə & Balans
+                            {t('nav.finance')}
                         </Button>
                         <Button
                             view={activePage === 'warehouses' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('warehouses')}
                         >
-                            Xarici Anbarlar
+                            {t('nav.warehouses')}
                         </Button>
                         <Button
                             view={activePage === 'support' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('support')}
                         >
-                            Dəstək
+                            {t('nav.support')}
                         </Button>
                     </>
                 )}
@@ -109,14 +112,14 @@ const Navbar = ({
                             size="l"
                             onClick={() => onNavigate('home')}
                         >
-                            Xidmətlər & Tariflər
+                            {t('nav.services')}
                         </Button>
                         <Button
                             view={activePage === 'tracking' ? 'action' : 'flat-secondary'}
                             size="l"
                             onClick={() => onNavigate('home')}
                         >
-                            Bağlama İzləmə
+                            {t('nav.tracking')}
                         </Button>
                     </>
                 )}
@@ -124,6 +127,7 @@ const Navbar = ({
 
             {/* Right: Balance Pill & User Account Menu */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <LanguageSwitcher />
                 {user ? (
                     <>
                         <NotificationBell />
@@ -148,7 +152,7 @@ const Navbar = ({
                                 size="xs"
                                 view="action"
                                 style={{ borderRadius: '50%', width: '24px', height: '24px', padding: 0 }}
-                                title="Balansı Artır"
+                                title={t('customerHome.topUp')}
                                 onClick={onOpenPayment}
                             >
                                 <Plus size={14} />
@@ -201,14 +205,14 @@ const Navbar = ({
                             size="l"
                             onClick={() => onNavigateAuth('login')}
                         >
-                            Daxil Ol
+                            {t('nav.login')}
                         </Button>
                         <Button
                             view={authMode === 'register' ? 'action' : 'outlined'}
                             size="l"
                             onClick={() => onNavigateAuth('register')}
                         >
-                            Qeydiyyat
+                            {t('nav.register')}
                         </Button>
                     </div>
                 )}

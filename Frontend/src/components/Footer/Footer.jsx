@@ -1,9 +1,11 @@
 // Frontend/src/components/Footer/Footer.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Text, Label, Button } from '@gravity-ui/uikit';
 import { Box, ShieldCheck, Clock, Globe } from '@gravity-ui/icons';
 
 const Footer = ({ onNavigate }) => {
+    const { t } = useTranslation();
     return (
         <footer style={{
             backgroundColor: '#161b22',
@@ -33,8 +35,7 @@ const Footer = ({ onNavigate }) => {
                     </div>
 
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px', lineHeight: 1.6 }}>
-                        CargoMS — Türkiyə, ABŞ və Avropa ölkələrindən onlayn sifariş etdiyiniz bağlamaların 
-                        etibarlı və sürətli şəkildə Azərbaycana çatdırılmasını həyata keçirən innovativ kargo xidmətidir.
+                        {t('footer.bio')}
                     </Text>
 
                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
@@ -46,25 +47,25 @@ const Footer = ({ onNavigate }) => {
 
                 {/* Column 2: Quick Links */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>Naviqasiya</Text>
-                    <a href="#home" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('home'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>Ana Səhifə</a>
-                    <a href="#packages" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('packages'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>Bağlamalarım</a>
-                    <a href="#finance" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('finance'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>Maliyyə və Balans</a>
-                    <a href="#warehouses" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('warehouses'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>Xarici Anbarlar</a>
+                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>{t('footer.navigation')}</Text>
+                    <a href="#home" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('home'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>{t('nav.home')}</a>
+                    <a href="#packages" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('packages'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>{t('nav.packages')}</a>
+                    <a href="#finance" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('finance'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>{t('nav.finance')}</a>
+                    <a href="#warehouses" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('warehouses'); }} style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px' }}>{t('nav.warehouses')}</a>
                 </div>
 
                 {/* Column 3: Rules & FAQ */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>Faydalı</Text>
-                    <span style={{ fontSize: '14px' }}>Bəyannamə Qaydaları</span>
-                    <span style={{ fontSize: '14px' }}>Qadağan Olunmuş Mallar</span>
-                    <span style={{ fontSize: '14px' }}>Daşınma Tarifləri</span>
-                    <span style={{ fontSize: '14px' }}>Tez-tez Verilən Suallar</span>
+                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>{t('footer.useful')}</Text>
+                    <span style={{ fontSize: '14px' }}>{t('footer.declarationRules')}</span>
+                    <span style={{ fontSize: '14px' }}>{t('footer.bannedGoods')}</span>
+                    <span style={{ fontSize: '14px' }}>{t('footer.rates')}</span>
+                    <span style={{ fontSize: '14px' }}>{t('footer.faq')}</span>
                 </div>
 
                 {/* Column 4: Contact & Office */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>Əlaqə & Filial</Text>
+                    <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '4px' }}>{t('footer.contact')}</Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px' }}>
                         <strong>*0011</strong> / +994 (12) 490-00-11
                     </Text>
@@ -72,10 +73,10 @@ const Footer = ({ onNavigate }) => {
                         support@cargoms.az
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '14px' }}>
-                        Bakı şəhəri, Nəsimi r-nu, Nizami küç. 142
+                        {t('footer.address')}
                     </Text>
                     <Text variant="caption-2" color="secondary" style={{ marginTop: '4px' }}>
-                        İş saatları: B.e - Şənbə: 09:00 - 20:00
+                        {t('footer.hours')}
                     </Text>
                 </div>
             </div>
@@ -89,8 +90,8 @@ const Footer = ({ onNavigate }) => {
                 alignItems: 'center',
                 fontSize: '13px'
             }}>
-                <Text color="secondary">© 2026 CargoMS Logistics Management System. Bütün hüquqlar qorunur.</Text>
-                <Text color="secondary">Məxfilik Siyasəti | İstifadəçi Şərtləri</Text>
+                <Text color="secondary">{t('footer.rights')}</Text>
+                <Text color="secondary">{t('footer.legal')}</Text>
             </div>
         </footer>
     );

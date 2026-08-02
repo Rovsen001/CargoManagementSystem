@@ -1,7 +1,8 @@
 // Frontend/src/components/Payment/PaymentModal.jsx
-import React, { useState } from 'react';
-import { Modal, Card, Text, Button, TextInput, Label, Alert, Spin } from '@gravity-ui/uikit';
-import { ShieldCheck, Lock, Check, Wallet, ArrowRight, ArrowRotateRight } from '@gravity-ui/icons';
+import React, { useState, useEffect } from 'react';
+import { Modal, Card, Text, Button, TextInput, Label, Alert, Spin, Loader } from '@gravity-ui/uikit';
+import { ShieldCheck, Lock, Check, Wallet, ArrowRight, ArrowRotateRight, CreditCard } from '@gravity-ui/icons';
+import api from '../../services/api';
 
 const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId }) => {
     const [step, setStep] = useState(1); // 1: Select Amount & Card, 2: 3DS OTP, 3: Success Receipt
@@ -15,6 +16,36 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [receiptData, setReceiptData] = useState(null);
+
+    const [stripeEnabled, setStripeEnabled] = useState(null); // null = hələ bilinmir
+    const [stripeRedirecting, setStripeRedirecting] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        api.get('/finance/payment-config')
+            .then((res) => setStripeEnabled(Boolean(res.data.stripeEnabled)))
+            .catch(() => setStripeEnabled(false));
+    }, [open]);
+
+    const handleStripeCheckout = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        const numVal = parseFloat(amount);
+        if (isNaN(numVal) || numVal <= 0) {
+            setError('Zəhmət olmasa düzgün məbləğ daxil edin.');
+            return;
+        }
+
+        setStripeRedirecting(true);
+        try {
+            const response = await api.post('/finance/create-checkout-session', { amount: numVal });
+            window.location.href = response.data.url;
+        } catch (err) {
+            setError(err.response?.data?.message || 'Ödəniş sessiyası yaradılarkən xəta baş verdi.');
+            setStripeRedirecting(false);
+        }
+    };
 
     const presetAmounts = ['10', '20', '50', '100', '200'];
 
@@ -148,14 +179,16 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '16px' }}>
                     <div>
                         <Text variant="header-2" style={{ color: '#ffffff' }}>
-                            {step === 1 && 'Balans Artırılması'}
-                            {step === 2 && '3D Secure Təsdiq'}
-                            {step === 3 && 'Ödəniş Qəbzi'}
+                            {stripeEnabled === true && 'Balans Artırılması'}
+                            {stripeEnabled === false && step === 1 && 'Balans Artırılması'}
+                            {stripeEnabled === false && step === 2 && '3D Secure Təsdiq'}
+                            {stripeEnabled === false && step === 3 && 'Ödəniş Qəbzi'}
                         </Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '2px', fontSize: '13px' }}>
-                            {step === 1 && 'Təhlükəsiz SSL 256-bit şifrələnmiş onlayn ödəniş'}
-                            {step === 2 && 'Bankınız tərəfindən SMS ilə göndərilən 6-rəqəmli kodu daxil edin'}
-                            {step === 3 && 'Əməliyyat uğurla tamamlandı və balansınıza əlavə edildi'}
+                            {stripeEnabled === true && 'Stripe vasitəsilə təhlükəsiz kart ödənişi'}
+                            {stripeEnabled === false && step === 1 && 'Təhlükəsiz SSL 256-bit şifrələnmiş onlayn ödəniş'}
+                            {stripeEnabled === false && step === 2 && 'Bankınız tərəfindən SMS ilə göndərilən 6-rəqəmli kodu daxil edin'}
+                            {stripeEnabled === false && step === 3 && 'Əməliyyat uğurla tamamlandı və balansınıza əlavə edildi'}
                         </Text>
                     </div>
                     <Label theme="info" size="m"><ShieldCheck /> SSL Protected</Label>
@@ -165,8 +198,60 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                     <Alert theme="danger" message={error} />
                 )}
 
+                {stripeEnabled === null && (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                        <Loader size="l" />
+                    </div>
+                )}
+
+                {stripeEnabled === true && (
+                    <form onSubmit={handleStripeCheckout} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                            <Text variant="caption-2" color="secondary" style={{ marginBottom: '8px', display: 'block' }}>Artırılacaq Məbləğ (USD)</Text>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                {presetAmounts.map((amt) => (
+                                    <Button
+                                        key={amt}
+                                        size="m"
+                                        view={amount === amt ? 'action' : 'outlined'}
+                                        onClick={() => setAmount(amt)}
+                                        type="button"
+                                        style={{ flex: 1 }}
+                                    >
+                                        +{amt} $
+                                    </Button>
+                                ))}
+                            </div>
+                            <TextInput
+                                size="xl"
+                                type="number"
+                                min="1"
+                                placeholder="Özəl məbləğ daxil edin"
+                                value={amount}
+                                onUpdate={(val) => setAmount(val)}
+                                step="0.01"
+                            />
+                        </div>
+
+                        <Alert theme="info" title="Stripe ilə təhlükəsiz ödəniş" message="Kart məlumatlarınız birbaşa Stripe-ın təhlükəsiz ödəniş səhifəsində daxil ediləcək. CargoMS heç vaxt kart nömrənizi görmür və ya saxlamır." />
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                            <div>
+                                <Text color="secondary" variant="caption-2" style={{ display: 'block' }}>Yekun Ödəniləcək:</Text>
+                                <Text variant="header-2" style={{ color: '#56d924', fontWeight: 'bold' }}>${parseFloat(amount || 0).toFixed(2)}</Text>
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <Button view="flat" size="l" onClick={handleReset} type="button">Ləğv Et</Button>
+                                <Button view="action" size="l" type="submit" loading={stripeRedirecting}>
+                                    <Button.Icon><CreditCard /></Button.Icon> Stripe ilə Ödə
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                )}
+
                 {/* STEP 1: AMOUNT & CARD SELECTION */}
-                {step === 1 && (
+                {stripeEnabled === false && step === 1 && (
                     <form onSubmit={handleProceedToOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         {/* Payment Method Selector */}
                         <div>
@@ -295,7 +380,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                 )}
 
                 {/* STEP 2: 3D SECURE OTP CODE */}
-                {step === 2 && (
+                {stripeEnabled === false && step === 2 && (
                     <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
                         <div style={{ backgroundColor: '#0d1117', padding: '20px', borderRadius: '12px', border: '1px solid #30363d' }}>
                             <Lock size={32} style={{ color: '#1f6feb', marginBottom: '12px' }} />
@@ -326,7 +411,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                 )}
 
                 {/* STEP 3: SUCCESS RECEIPT */}
-                {step === 3 && receiptData && (
+                {stripeEnabled === false && step === 3 && receiptData && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div style={{
                             textAlign: 'center',
