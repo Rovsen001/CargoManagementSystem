@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Text, Card, Loader, Select, Label, TextInput, Icon } from '@gravity-ui/uikit';
+import { Table, Text, Card, Loader, Select, Label, TextInput, Icon, Pagination } from '@gravity-ui/uikit';
 import { Magnifier } from '@gravity-ui/icons';
 import api from '../services/api';
+
+const PAGE_SIZE = 15;
 
 const Customers = () => {
     const currentUser = JSON.parse(localStorage.getItem('user')) || {};
     const [users, setUsers] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -15,10 +19,11 @@ const Customers = () => {
         setLoading(true);
         try {
             const [usersRes, rolesRes] = await Promise.all([
-                api.get('/users'),
+                api.get('/users', { params: { page, limit: PAGE_SIZE, search: searchQuery.trim() || undefined } }),
                 api.get('/roles/names')
             ]);
-            setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+            setUsers(Array.isArray(usersRes.data?.data) ? usersRes.data.data : []);
+            setTotal(usersRes.data?.total || 0);
             setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
         } catch (error) {
             console.error("Məlumatlar çəkilərkən xəta:", error);
@@ -30,7 +35,12 @@ const Customers = () => {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [page, searchQuery]);
+
+    const handleSearchChange = (value) => {
+        setSearchQuery(value);
+        setPage(1);
+    };
 
     const handleRoleChange = async (userId, newRole) => {
         setUpdatingId(userId);
@@ -44,12 +54,6 @@ const Customers = () => {
             setUpdatingId(null);
         }
     };
-
-    const filteredUsers = users.filter((u) => {
-        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
-        const q = searchQuery.toLowerCase().trim();
-        return fullName.includes(q) || (u.email || '').toLowerCase().includes(q);
-    });
 
     const roleTheme = { Admin: 'warning', 'Super Admin': 'warning', Staff: 'success', Manager: 'success', Courier: 'success', Customer: 'info' };
 
@@ -104,7 +108,7 @@ const Customers = () => {
                 <TextInput
                     placeholder="Ad, soyad və ya email ilə axtar..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     hasClearable
                     size="l"
                     leftContent={<Icon data={Magnifier} style={{ marginLeft: '10px' }} />}
@@ -112,20 +116,31 @@ const Customers = () => {
             </Card>
 
             <Text variant="caption-2" color="secondary">
-                Göstərilir: <strong>{filteredUsers.length}</strong> / {users.length} istifadəçi
+                Göstərilir: <strong>{users.length}</strong> / {total} istifadəçi
             </Text>
 
             <Card style={{ padding: '8px', overflowX: 'auto' }}>
                 {loading ? (
                     <div style={{ padding: '40px', textAlign: 'center' }}><Loader size="l" /></div>
-                ) : filteredUsers.length > 0 ? (
-                    <Table data={filteredUsers} columns={columns} />
+                ) : users.length > 0 ? (
+                    <Table data={users} columns={columns} />
                 ) : (
                     <div style={{ padding: '40px', textAlign: 'center' }}>
                         <Text variant="subheader-1" color="secondary">İstifadəçi tapılmadı.</Text>
                     </div>
                 )}
             </Card>
+
+            {total > PAGE_SIZE && (
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <Pagination
+                        page={page}
+                        pageSize={PAGE_SIZE}
+                        total={total}
+                        onUpdate={(newPage) => setPage(newPage)}
+                    />
+                </div>
+            )}
         </div>
     );
 };

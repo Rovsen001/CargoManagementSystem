@@ -6,12 +6,74 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const rateLimit = require('express-rate-limit');
+const speakeasy = require('speakeasy');
 
 const app = express();
 app.use(cors());
+
+// Stripe yalnız .env-də STRIPE_SECRET_KEY qeyd olunubsa aktivləşir (real satıcı açarları tələb olunur)
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+
+// Stripe webhook-u imza yoxlaması üçün RAW body tələb edir — buna görə express.json()-dan ƏVVƏL qeydə alınır
+app.post('/api/finance/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+        return res.status(400).send('Stripe konfiqurasiya edilməyib');
+    }
+
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+        console.error('Stripe webhook imza xətası:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        const userId = parseInt(session.client_reference_id);
+        const amount = (session.amount_total || 0) / 100;
+
+        if (userId && amount > 0) {
+            try {
+                await pool.request()
+                    .input('amount', sql.Decimal(10, 2), amount)
+                    .input('userId', sql.Int, userId)
+                    .query('UPDATE Users SET balance = ISNULL(balance, 0) + @amount WHERE id = @userId');
+
+                await pool.request()
+                    .input('userId', sql.Int, userId)
+                    .input('amount', sql.Decimal(10, 2), amount)
+                    .input('type', sql.VarChar(10), 'inkam')
+                    .input('description', sql.NVarChar(255), `Stripe ödənişi (${session.id})`)
+                    .query(`
+                        INSERT INTO transactions (user_id, amount, type, description)
+                        VALUES (@userId, @amount, @type, @description)
+                    `);
+            } catch (err) {
+                console.error('Stripe webhook balans yenilənərkən xəta:', err.message);
+                return res.status(500).send('Server xətası');
+            }
+        }
+    }
+
+    res.json({ received: true });
+});
+
 app.use(express.json());
 
+// Giriş cəhdlərini məhdudlaşdırır (brute-force hücumlarına qarşı)
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Çox sayda uğursuz giriş cəhdi. Zəhmət olmasa 15 dəqiqə sonra yenidən cəhd edin." },
+    skipSuccessfulRequests: true
+});
+
 const JWT_SECRET = process.env.JWT_SECRET;
+const INSURANCE_RATE = 0.02; // Bəyan edilmiş dəyərin 2%-i sığorta haqqı kimi tutulur
 const config = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -99,6 +161,83 @@ function requirePermission(key) {
     };
 }
 
+// Admin əməliyyatlarını qeyd edir (audit log). Xəta versə belə əsas əməliyyatı pozmur.
+async function logAudit(req, action, targetType, targetId, details) {
+    try {
+        await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('userRole', sql.NVarChar, req.user.role)
+            .input('action', sql.NVarChar, action)
+            .input('targetType', sql.NVarChar, targetType)
+            .input('targetId', sql.NVarChar, targetId !== undefined && targetId !== null ? String(targetId) : null)
+            .input('details', sql.NVarChar, details ? JSON.stringify(details) : null)
+            .query(`
+                INSERT INTO AuditLog (userId, userRole, action, targetType, targetId, details)
+                VALUES (@userId, @userRole, @action, @targetType, @targetId, @details)
+            `);
+    } catch (err) {
+        console.error('Audit log yazıla bilmədi:', err.message);
+    }
+}
+
+// Bağlama statusu dəyişəndə sahibinə daxili bildiriş yaradır və email göndərir (xəta versə əsas əməliyyatı pozmur)
+async function notifyPackageStatusChange(packageOwnerId, trackingNumber, newStatus) {
+    const title = 'Bağlamanızın statusu yeniləndi';
+    const message = `${trackingNumber} nömrəli bağlamanızın yeni statusu: ${newStatus}`;
+
+    try {
+        await pool.request()
+            .input('userId', sql.Int, packageOwnerId)
+            .input('title', sql.NVarChar, title)
+            .input('message', sql.NVarChar, message)
+            .query(`
+                INSERT INTO Notifications (userId, title, message, type, isRead)
+                VALUES (@userId, @title, @message, 'status_change', 0)
+            `);
+    } catch (err) {
+        console.error('Bildiriş yazıla bilmədi:', err.message);
+    }
+
+    try {
+        const userResult = await pool.request()
+            .input('userId', sql.Int, packageOwnerId)
+            .query('SELECT email, firstName FROM Users WHERE id = @userId');
+        const owner = userResult.recordset[0];
+        if (owner?.email) {
+            await transporter.sendMail({
+                from: `"CargoMS" <${process.env.SMTP_USER}>`,
+                to: owner.email,
+                subject: `CargoMS - Bağlama Statusu Yeniləndi (${trackingNumber})`,
+                html: `
+                    <p>Salam ${owner.firstName || ''},</p>
+                    <p><strong>${trackingNumber}</strong> nömrəli bağlamanızın statusu yeniləndi:</p>
+                    <p style="font-size: 18px; font-weight: bold; color: #8b5cf6;">${newStatus}</p>
+                    <p>Bağlamanızı izləmək üçün CargoMS hesabınıza daxil olun.</p>
+                `
+            });
+        }
+    } catch (err) {
+        console.error('Bildiriş email-i göndərilə bilmədi:', err.message);
+    }
+}
+
+// Sadə daxili bildiriş yazır (email göndərmir). Xəta versə əsas əməliyyatı pozmur.
+async function createInAppNotification(userId, title, message, type = 'general') {
+    try {
+        await pool.request()
+            .input('userId', sql.Int, userId)
+            .input('title', sql.NVarChar, title)
+            .input('message', sql.NVarChar, message)
+            .input('type', sql.NVarChar, type)
+            .query(`
+                INSERT INTO Notifications (userId, title, message, type, isRead)
+                VALUES (@userId, @title, @message, @type, 0)
+            `);
+    } catch (err) {
+        console.error('Bildiriş yazıla bilmədi:', err.message);
+    }
+}
+
 // Yalnız Super Admin üçün (rol idarəetməsi kimi checkbox-larla ötürülə bilməyən əməliyyatlar)
 async function requireSuperAdmin(req, res, next) {
     try {
@@ -167,7 +306,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // 2. GİRİŞ (LOGIN)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -188,6 +327,15 @@ app.post('/api/auth/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Email və ya şifrə yanlışdır!" });
+        }
+
+        if (user.twoFactorEnabled) {
+            const tempToken = jwt.sign(
+                { id: user.id, type: '2fa-pending' },
+                JWT_SECRET,
+                { expiresIn: '5m' }
+            );
+            return res.json({ requires2FA: true, tempToken });
         }
 
         const { isSuperAdmin, permissions } = await getRoleInfo(user.role);
@@ -212,6 +360,188 @@ app.post('/api/auth/login', async (req, res) => {
                 permissions
             }
         });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2.1 2FA Kodu ilə Girişi Tamamlamaq
+app.post('/api/auth/2fa/login-verify', loginLimiter, async (req, res) => {
+    const { tempToken, token: totpToken } = req.body;
+
+    if (!tempToken || !totpToken) {
+        return res.status(400).json({ message: "Kod tələb olunur!" });
+    }
+
+    try {
+        let decoded;
+        try {
+            decoded = jwt.verify(tempToken, JWT_SECRET);
+        } catch (err) {
+            return res.status(401).json({ message: "Sessiya vaxtı bitib, yenidən daxil olun." });
+        }
+        if (decoded.type !== '2fa-pending') {
+            return res.status(400).json({ message: "Yanlış sorğu." });
+        }
+
+        const result = await pool.request()
+            .input('id', sql.Int, decoded.id)
+            .query('SELECT * FROM Users WHERE id = @id');
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+        }
+        const user = result.recordset[0];
+
+        if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+            return res.status(400).json({ message: "2FA aktiv deyil." });
+        }
+
+        const verified = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: totpToken,
+            window: 1
+        });
+
+        if (!verified) {
+            return res.status(400).json({ message: "Doğrulama kodu yanlışdır!" });
+        }
+
+        const { isSuperAdmin, permissions } = await getRoleInfo(user.role);
+
+        const finalToken = jwt.sign(
+            { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '1d' }
+        );
+
+        res.json({
+            message: "Giriş uğurludur!",
+            token: finalToken,
+            user: {
+                id: user.id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                role: user.role,
+                balance: user.balance || 0,
+                isSuperAdmin,
+                permissions
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2.2 2FA Quraşdırılmasını Başlat (yalnız Admin/Super Admin)
+app.post('/api/auth/2fa/setup', verifyToken, async (req, res) => {
+    const { isSuperAdmin } = await getRoleInfo(req.user.role);
+    if (!isSuperAdmin && req.user.role !== 'Admin') {
+        return res.status(403).json({ message: "2FA yalnız Admin və Super Admin hesabları üçün mövcuddur." });
+    }
+
+    try {
+        const secret = speakeasy.generateSecret({
+            name: `CargoMS (${req.user.email})`,
+            length: 20
+        });
+
+        await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .input('secret', sql.NVarChar, secret.base32)
+            .query('UPDATE Users SET twoFactorSecret = @secret, twoFactorEnabled = 0 WHERE id = @id');
+
+        res.json({ secret: secret.base32, otpauthUrl: secret.otpauth_url });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2.3 2FA Quraşdırılmasını Təsdiqlə (kodu doğrulayıb aktivləşdirir)
+app.post('/api/auth/2fa/verify-setup', verifyToken, async (req, res) => {
+    const { token: totpToken } = req.body;
+    if (!totpToken) {
+        return res.status(400).json({ message: "Doğrulama kodu tələb olunur!" });
+    }
+
+    try {
+        const result = await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query('SELECT twoFactorSecret FROM Users WHERE id = @id');
+
+        const secret = result.recordset[0]?.twoFactorSecret;
+        if (!secret) {
+            return res.status(400).json({ message: "Əvvəlcə 2FA quraşdırmasını başladın." });
+        }
+
+        const verified = speakeasy.totp.verify({
+            secret,
+            encoding: 'base32',
+            token: totpToken,
+            window: 1
+        });
+
+        if (!verified) {
+            return res.status(400).json({ message: "Doğrulama kodu yanlışdır!" });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query('UPDATE Users SET twoFactorEnabled = 1 WHERE id = @id');
+
+        res.json({ message: "2FA uğurla aktivləşdirildi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2.4 2FA-nı Deaktiv Et (cari koda tələbat var)
+app.post('/api/auth/2fa/disable', verifyToken, async (req, res) => {
+    const { token: totpToken } = req.body;
+    if (!totpToken) {
+        return res.status(400).json({ message: "Doğrulama kodu tələb olunur!" });
+    }
+
+    try {
+        const result = await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query('SELECT twoFactorSecret, twoFactorEnabled FROM Users WHERE id = @id');
+
+        const user = result.recordset[0];
+        if (!user?.twoFactorEnabled) {
+            return res.status(400).json({ message: "2FA artıq aktiv deyil." });
+        }
+
+        const verified = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: totpToken,
+            window: 1
+        });
+
+        if (!verified) {
+            return res.status(400).json({ message: "Doğrulama kodu yanlışdır!" });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query('UPDATE Users SET twoFactorEnabled = 0, twoFactorSecret = NULL WHERE id = @id');
+
+        res.json({ message: "2FA deaktiv edildi." });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2.5 2FA Statusunu Yoxla
+app.get('/api/auth/2fa/status', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query('SELECT twoFactorEnabled FROM Users WHERE id = @id');
+        res.json({ enabled: Boolean(result.recordset[0]?.twoFactorEnabled) });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -405,13 +735,27 @@ app.get('/api/public/track/:trackingNumber', async (req, res) => {
     try {
         const result = await pool.request()
             .input('trackingNumber', sql.NVarChar, trackingNumber)
-            .query('SELECT trackingNumber, weight, price, status FROM Packages WHERE trackingNumber = @trackingNumber AND isDeleted = 0');
+            .query('SELECT id, trackingNumber, weight, price, status, isInsured, declaredValue, insuranceFee FROM Packages WHERE trackingNumber = @trackingNumber AND isDeleted = 0');
 
         if (result.recordset.length === 0) {
             return res.status(404).json({ message: 'Bağlama tapılmadı' });
         }
 
-        res.json(result.recordset[0]);
+        const pkg = result.recordset[0];
+        const historyResult = await pool.request()
+            .input('packageId', sql.Int, pkg.id)
+            .query('SELECT status, changedAt FROM PackageStatusHistory WHERE packageId = @packageId ORDER BY changedAt ASC');
+
+        res.json({
+            trackingNumber: pkg.trackingNumber,
+            weight: pkg.weight,
+            price: pkg.price,
+            status: pkg.status,
+            isInsured: pkg.isInsured,
+            declaredValue: pkg.declaredValue,
+            insuranceFee: pkg.insuranceFee,
+            history: historyResult.recordset
+        });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -421,36 +765,191 @@ app.get('/api/public/track/:trackingNumber', async (req, res) => {
 // 📦 PACKAGES API MARŞRUTLARI (ROLA UYĞUN)
 // ==========================================
 
-// 1. Get Packages
+// 1. Get Packages (page/limit verilmədikdə köhnə davranış kimi tam massiv qaytarır — geriyə uyğunluq üçün)
 app.get('/api/packages', verifyToken, async (req, res) => {
     try {
         const isDeleted = req.query.archived === 'true' ? 1 : 0;
         const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
         const canViewAll = isSuperAdmin || permissions.includes('packages.viewAll');
+        const isCourierScoped = !canViewAll && permissions.includes('packages.viewAssigned');
 
-        let query = 'SELECT * FROM Packages WHERE isDeleted = @isDeleted';
-        if (!canViewAll) {
-            query += ' AND userId = @userId';
+        const search = (req.query.search || '').trim();
+        const statusFilter = (req.query.status || '').trim();
+        const page = parseInt(req.query.page);
+        const isPaginated = !isNaN(page) && page > 0;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+
+        const buildRequest = () => {
+            const request = pool.request().input('isDeleted', sql.Bit, isDeleted);
+            let whereClause = 'WHERE p.isDeleted = @isDeleted';
+            if (isCourierScoped) {
+                whereClause += ' AND p.assignedCourierId = @userId';
+                request.input('userId', sql.Int, req.user.id);
+            } else if (!canViewAll) {
+                whereClause += ' AND p.userId = @userId';
+                request.input('userId', sql.Int, req.user.id);
+            }
+            if (search) {
+                whereClause += ' AND p.trackingNumber LIKE @search';
+                request.input('search', sql.NVarChar, `%${search}%`);
+            }
+            if (statusFilter && statusFilter !== 'ALL') {
+                whereClause += ' AND p.status = @status';
+                request.input('status', sql.NVarChar, statusFilter);
+            }
+            return { request, whereClause };
+        };
+
+        const selectColumns = `
+            p.*,
+            u.firstName as ownerFirstName, u.lastName as ownerLastName, u.email as ownerEmail,
+            w.name as warehouseName, w.country as warehouseCountry
+        `;
+        const joinClause = 'FROM Packages p LEFT JOIN Users u ON u.id = p.userId LEFT JOIN Warehouses w ON w.id = p.warehouseId';
+
+        if (!isPaginated) {
+            const { request, whereClause } = buildRequest();
+            const result = await request.query(`SELECT ${selectColumns} ${joinClause} ${whereClause} ORDER BY p.id DESC`);
+            return res.json(result.recordset);
         }
-        query += ' ORDER BY id DESC';
 
-        const request = pool.request().input('isDeleted', sql.Bit, isDeleted);
-        if (!canViewAll) {
-            request.input('userId', sql.Int, req.user.id);
-        }
+        const { request: countRequest, whereClause: countWhere } = buildRequest();
+        const countResult = await countRequest.query(`SELECT COUNT(*) as total ${joinClause} ${countWhere}`);
+        const total = countResult.recordset[0].total;
 
-        const result = await request.query(query);
-        res.json(result.recordset);
+        const { request: dataRequest, whereClause: dataWhere } = buildRequest();
+        dataRequest.input('offset', sql.Int, (page - 1) * limit);
+        dataRequest.input('limit', sql.Int, limit);
+        const result = await dataRequest.query(`
+            SELECT ${selectColumns} ${joinClause} ${dataWhere}
+            ORDER BY p.id DESC
+            OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+        `);
+
+        res.json({
+            data: result.recordset,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        });
     } catch (err) {
         res.status(500).send(err.message);
     }
 });
 
-// 2. Add Package
+// 1.1 Kuryerlərin Siyahısı (bağlamaya təyin etmək üçün)
+app.get('/api/couriers', verifyToken, requirePermission('packages.assignCourier'), async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT DISTINCT u.id, u.firstName, u.lastName, u.email
+            FROM Users u
+            JOIN Roles r ON r.name = u.role
+            JOIN RolePermissions rp ON rp.roleId = r.id
+            JOIN Permissions p ON p.id = rp.permissionId
+            WHERE p.[key] = 'packages.viewAssigned'
+            ORDER BY u.firstName
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 1.2 Bağlamaya Kuryer Təyin Etmək / Təyinatı Ləğv Etmək
+app.put('/api/packages/:id/assign-courier', verifyToken, requirePermission('packages.assignCourier'), async (req, res) => {
+    const { id } = req.params;
+    const courierId = req.body.courierId ? parseInt(req.body.courierId) : null;
+
+    try {
+        if (courierId !== null) {
+            const courierCheck = await pool.request()
+                .input('courierId', sql.Int, courierId)
+                .query(`
+                    SELECT u.id FROM Users u
+                    JOIN Roles r ON r.name = u.role
+                    JOIN RolePermissions rp ON rp.roleId = r.id
+                    JOIN Permissions p ON p.id = rp.permissionId
+                    WHERE p.[key] = 'packages.viewAssigned' AND u.id = @courierId
+                `);
+            if (courierCheck.recordset.length === 0) {
+                return res.status(400).json({ message: "Seçilmiş istifadəçi kuryer deyil" });
+            }
+        }
+
+        const result = await pool.request()
+            .input('id', sql.Int, id)
+            .input('courierId', sql.Int, courierId)
+            .query('UPDATE Packages SET assignedCourierId = @courierId WHERE id = @id');
+
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+
+        await logAudit(req, 'package.assignCourier', 'Package', id, { courierId });
+
+        res.json({ message: courierId ? "Kuryer təyin edildi" : "Kuryer təyinatı ləğv edildi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 1.3 Kuryerin Özünə Təyin Olunmuş Bağlamanın Statusunu Yeniləməsi
+app.put('/api/packages/:id/courier-status', verifyToken, requirePermission('packages.viewAssigned'), async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowedStatuses = ['Yoldadır', 'Gömrükdə', 'Filialda', 'Təhvil verildi'];
+
+    if (!status || !allowedStatuses.includes(status)) {
+        return res.status(400).json({ message: "Düzgün status seçin" });
+    }
+
+    try {
+        const existing = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT status, assignedCourierId, userId, trackingNumber FROM Packages WHERE id = @id');
+
+        if (existing.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        if (existing.recordset[0].assignedCourierId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlama sizə təyin edilməyib" });
+        }
+
+        const previousStatus = existing.recordset[0].status;
+        const ownerId = existing.recordset[0].userId;
+        const trackingNumber = existing.recordset[0].trackingNumber;
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('status', sql.NVarChar, status)
+            .query('UPDATE Packages SET status = @status WHERE id = @id');
+
+        if (status !== previousStatus) {
+            await pool.request()
+                .input('packageId', sql.Int, id)
+                .input('status', sql.NVarChar, status)
+                .input('changedByUserId', sql.Int, req.user.id)
+                .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+            await notifyPackageStatusChange(ownerId, trackingNumber, status);
+        }
+
+        res.json({ message: "Status yeniləndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Add Package (qiymət müştəri tərəfindən deyil, çəki × anbar tarifinə görə sistem tərəfindən hesablanır)
 app.post('/api/packages', verifyToken, async (req, res) => {
     const { trackingNumber } = req.body;
     const weight = parseFloat(req.body.weight);
-    const price = parseFloat(req.body.price);
+    const warehouseId = parseInt(req.body.warehouseId);
+    const isInsured = Boolean(req.body.isInsured);
+    const declaredValue = parseFloat(req.body.declaredValue);
+    const hsCode = (req.body.hsCode || '').trim() || null;
+    const itemDescription = (req.body.itemDescription || '').trim() || null;
+    const countryOfOrigin = (req.body.countryOfOrigin || '').trim() || null;
 
     if (!trackingNumber || !trackingNumber.trim()) {
         return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
@@ -458,21 +957,53 @@ app.post('/api/packages', verifyToken, async (req, res) => {
     if (isNaN(weight) || weight < 0) {
         return res.status(400).json({ message: "Çəki düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
-    if (isNaN(price) || price < 0) {
-        return res.status(400).json({ message: "Qiymət düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    if (isNaN(warehouseId)) {
+        return res.status(400).json({ message: "Anbar seçilməlidir!" });
+    }
+    if (isInsured && (isNaN(declaredValue) || declaredValue <= 0)) {
+        return res.status(400).json({ message: "Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!" });
     }
 
     try {
-        await pool.request()
+        const warehouseResult = await pool.request()
+            .input('id', sql.Int, warehouseId)
+            .query('SELECT ratePerKg FROM Warehouses WHERE id = @id AND isActive = 1');
+
+        if (warehouseResult.recordset.length === 0) {
+            return res.status(400).json({ message: "Seçilmiş anbar tapılmadı və ya aktiv deyil" });
+        }
+
+        const ratePerKg = warehouseResult.recordset[0].ratePerKg;
+        const price = Math.round(weight * ratePerKg * 100) / 100;
+        const finalDeclaredValue = isInsured ? declaredValue : null;
+        const insuranceFee = isInsured ? Math.round(declaredValue * INSURANCE_RATE * 100) / 100 : 0;
+
+        const insertResult = await pool.request()
             .input('trackingNumber', sql.NVarChar, trackingNumber)
             .input('weight', sql.Decimal(10, 2), weight)
             .input('price', sql.Decimal(10, 2), price)
             .input('status', sql.NVarChar, 'Bəyan edildi')
             .input('userId', sql.Int, req.user.id)
+            .input('warehouseId', sql.Int, warehouseId)
+            .input('isInsured', sql.Bit, isInsured)
+            .input('declaredValue', sql.Decimal(10, 2), finalDeclaredValue)
+            .input('insuranceFee', sql.Decimal(10, 2), insuranceFee)
+            .input('hsCode', sql.NVarChar, hsCode)
+            .input('itemDescription', sql.NVarChar, itemDescription)
+            .input('countryOfOrigin', sql.NVarChar, countryOfOrigin)
             .query(`
-        INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId)
-        VALUES (@trackingNumber, @weight, @price, @status, 0, @userId)
+        INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId, warehouseId, isInsured, declaredValue, insuranceFee, hsCode, itemDescription, countryOfOrigin)
+        OUTPUT INSERTED.id
+        VALUES (@trackingNumber, @weight, @price, @status, 0, @userId, @warehouseId, @isInsured, @declaredValue, @insuranceFee, @hsCode, @itemDescription, @countryOfOrigin)
       `);
+
+        const newPackageId = insertResult.recordset[0].id;
+        await pool.request()
+            .input('packageId', sql.Int, newPackageId)
+            .input('status', sql.NVarChar, 'Bəyan edildi')
+            .input('changedByUserId', sql.Int, req.user.id)
+            .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+
         res.json({ message: "Bağlama əlavə edildi" });
     } catch (err) {
         res.status(500).send(err.message);
@@ -484,7 +1015,11 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { trackingNumber, status } = req.body;
     const weight = parseFloat(req.body.weight);
-    const price = parseFloat(req.body.price);
+    const isInsured = Boolean(req.body.isInsured);
+    const declaredValue = parseFloat(req.body.declaredValue);
+    const hsCode = (req.body.hsCode || '').trim() || null;
+    const itemDescription = (req.body.itemDescription || '').trim() || null;
+    const countryOfOrigin = (req.body.countryOfOrigin || '').trim() || null;
 
     if (!trackingNumber || !trackingNumber.trim()) {
         return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir!" });
@@ -492,21 +1027,57 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
     if (isNaN(weight) || weight < 0) {
         return res.status(400).json({ message: "Çəki düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
     }
-    if (isNaN(price) || price < 0) {
-        return res.status(400).json({ message: "Qiymət düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    if (isInsured && (isNaN(declaredValue) || declaredValue <= 0)) {
+        return res.status(400).json({ message: "Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!" });
     }
 
     const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
     const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
+    const canOverridePrice = isSuperAdmin || permissions.includes('packages.changeStatus');
     try {
+        const existing = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT status, warehouseId, price as previousPrice, userId as ownerId FROM Packages WHERE id = @id');
+        if (existing.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const previousStatus = existing.recordset[0].status;
+        const warehouseId = existing.recordset[0].warehouseId;
+        const previousPrice = existing.recordset[0].previousPrice;
+        const ownerId = existing.recordset[0].ownerId;
+
+        // Qiymət: Admin-səviyyəli istifadəçi əl ilə göndərsə istifadə olunur, əks halda çəki × anbar tarifinə görə yenidən hesablanır
+        let price;
+        let isManualOverride = false;
+        const manualPrice = parseFloat(req.body.price);
+        if (canOverridePrice && !isNaN(manualPrice) && manualPrice >= 0) {
+            price = manualPrice;
+            isManualOverride = true;
+        } else {
+            const warehouseResult = await pool.request()
+                .input('warehouseId', sql.Int, warehouseId)
+                .query('SELECT ratePerKg FROM Warehouses WHERE id = @warehouseId');
+            const ratePerKg = warehouseResult.recordset[0]?.ratePerKg || 0;
+            price = Math.round(weight * ratePerKg * 100) / 100;
+        }
+
+        const finalDeclaredValue = isInsured ? declaredValue : null;
+        const insuranceFee = isInsured ? Math.round(declaredValue * INSURANCE_RATE * 100) / 100 : 0;
+
         const request = pool.request()
             .input('id', sql.Int, id)
             .input('trackingNumber', sql.NVarChar, trackingNumber)
             .input('weight', sql.Decimal(10, 2), weight)
             .input('price', sql.Decimal(10, 2), price)
-            .input('status', sql.NVarChar, status);
+            .input('status', sql.NVarChar, status)
+            .input('isInsured', sql.Bit, isInsured)
+            .input('declaredValue', sql.Decimal(10, 2), finalDeclaredValue)
+            .input('insuranceFee', sql.Decimal(10, 2), insuranceFee)
+            .input('hsCode', sql.NVarChar, hsCode)
+            .input('itemDescription', sql.NVarChar, itemDescription)
+            .input('countryOfOrigin', sql.NVarChar, countryOfOrigin);
 
-        let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status WHERE id = @id';
+        let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status, isInsured = @isInsured, declaredValue = @declaredValue, insuranceFee = @insuranceFee, hsCode = @hsCode, itemDescription = @itemDescription, countryOfOrigin = @countryOfOrigin WHERE id = @id';
         if (!canEditAll) {
             query += ' AND userId = @userId';
             request.input('userId', sql.Int, req.user.id);
@@ -516,9 +1087,54 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
         if (result.rowsAffected[0] === 0) {
             return res.status(404).json({ message: "Bağlama tapılmadı və ya icazəniz yoxdur" });
         }
+
+        if (status && status !== previousStatus) {
+            await pool.request()
+                .input('packageId', sql.Int, id)
+                .input('status', sql.NVarChar, status)
+                .input('changedByUserId', sql.Int, req.user.id)
+                .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+            await notifyPackageStatusChange(ownerId, trackingNumber, status);
+        }
+
+        if (isManualOverride && parseFloat(previousPrice) !== price) {
+            await logAudit(req, 'package.priceOverride', 'Package', id, {
+                trackingNumber, previousPrice: parseFloat(previousPrice), newPrice: price
+            });
+        }
+        if (canEditAll && ownerId !== req.user.id) {
+            await logAudit(req, 'package.editAll', 'Package', id, { trackingNumber, ownerId });
+        }
+
         res.json({ message: "Bağlama yeniləndi" });
     } catch (err) {
         res.status(500).send(err.message);
+    }
+});
+
+// 3.1 Bağlamanın Status Tarixçəsi
+app.get('/api/packages/:id/history', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+    const canViewAll = isSuperAdmin || permissions.includes('packages.viewAll');
+
+    try {
+        const pkgCheck = await pool.request().input('id', sql.Int, id).query('SELECT userId, assignedCourierId FROM Packages WHERE id = @id');
+        if (pkgCheck.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const isOwner = pkgCheck.recordset[0].userId === req.user.id;
+        const isAssignedCourier = pkgCheck.recordset[0].assignedCourierId === req.user.id;
+        if (!canViewAll && !isOwner && !isAssignedCourier) {
+            return res.status(403).json({ message: "Bu bağlamaya baxmaq icazəniz yoxdur" });
+        }
+
+        const result = await pool.request()
+            .input('packageId', sql.Int, id)
+            .query('SELECT status, changedAt FROM PackageStatusHistory WHERE packageId = @packageId ORDER BY changedAt ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -552,6 +1168,7 @@ app.put('/api/packages/:id/restore', verifyToken, requirePermission('packages.re
         await pool.request()
             .input('id', sql.Int, id)
             .query('UPDATE Packages SET isDeleted = 0 WHERE id = @id');
+        await logAudit(req, 'package.restore', 'Package', id, null);
         res.json({ message: "Bağlama bərpa edildi" });
     } catch (err) {
         res.status(500).send(err.message);
@@ -562,9 +1179,18 @@ app.put('/api/packages/:id/restore', verifyToken, requirePermission('packages.re
 app.delete('/api/packages/:id/hard', verifyToken, requirePermission('packages.hardDelete'), async (req, res) => {
     const { id } = req.params;
     try {
+        const existing = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT trackingNumber FROM Packages WHERE id = @id');
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM Packages WHERE id = @id');
+
+        await logAudit(req, 'package.hardDelete', 'Package', id, {
+            trackingNumber: existing.recordset[0]?.trackingNumber
+        });
+
         res.json({ message: "Bağlama həmişəlik silindi" });
     } catch (err) {
         res.status(500).send(err.message);
@@ -621,15 +1247,52 @@ app.get('/api/roles/names', verifyToken, requirePermission('users.manageRoles'),
     }
 });
 
-// 2. İstifadəçilərin Siyahısı
+// 2. İstifadəçilərin Siyahısı (page/limit verilmədikdə köhnə davranış kimi tam massiv qaytarır — geriyə uyğunluq üçün)
 app.get('/api/users', verifyToken, requirePermission('users.view'), async (req, res) => {
     try {
-        const result = await pool.request().query(`
-      SELECT id, firstName, lastName, email, role, createdAt 
-      FROM Users 
-      ORDER BY id DESC
-    `);
-        res.json(result.recordset);
+        const search = (req.query.search || '').trim();
+        const page = parseInt(req.query.page);
+        const isPaginated = !isNaN(page) && page > 0;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+
+        const buildRequest = () => {
+            const request = pool.request();
+            let whereClause = '';
+            if (search) {
+                whereClause = 'WHERE firstName LIKE @search OR lastName LIKE @search OR email LIKE @search';
+                request.input('search', sql.NVarChar, `%${search}%`);
+            }
+            return { request, whereClause };
+        };
+
+        if (!isPaginated) {
+            const { request, whereClause } = buildRequest();
+            const result = await request.query(`
+                SELECT id, firstName, lastName, email, role, createdAt FROM Users ${whereClause} ORDER BY id DESC
+            `);
+            return res.json(result.recordset);
+        }
+
+        const { request: countRequest, whereClause: countWhere } = buildRequest();
+        const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM Users ${countWhere}`);
+        const total = countResult.recordset[0].total;
+
+        const { request: dataRequest, whereClause: dataWhere } = buildRequest();
+        dataRequest.input('offset', sql.Int, (page - 1) * limit);
+        dataRequest.input('limit', sql.Int, limit);
+        const result = await dataRequest.query(`
+            SELECT id, firstName, lastName, email, role, createdAt FROM Users ${dataWhere}
+            ORDER BY id DESC
+            OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+        `);
+
+        res.json({
+            data: result.recordset,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -664,10 +1327,20 @@ app.put('/api/users/:id/role', verifyToken, requirePermission('users.manageRoles
             }
         }
 
+        const targetUser = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT email, role FROM Users WHERE id = @id');
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('role', sql.NVarChar, role)
             .query('UPDATE Users SET role = @role WHERE id = @id');
+
+        await logAudit(req, 'user.roleChange', 'User', id, {
+            email: targetUser.recordset[0]?.email,
+            previousRole: targetUser.recordset[0]?.role,
+            newRole: role
+        });
 
         res.json({ message: "İstifadəçinin rolu yeniləndi!" });
     } catch (err) {
@@ -929,6 +1602,8 @@ app.post('/api/roles', verifyToken, requireSuperAdmin, async (req, res) => {
             }
         }
 
+        await logAudit(req, 'role.create', 'Role', roleId, { name: name.trim(), permissionKeys });
+
         res.status(201).json({ message: "Rol uğurla yaradıldı!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -997,6 +1672,8 @@ app.put('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) => {
             }
         }
 
+        await logAudit(req, 'role.update', 'Role', id, { name: name.trim(), permissionKeys });
+
         res.json({ message: "Rol uğurla yeniləndi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -1031,6 +1708,7 @@ app.delete('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) =>
         }
 
         await pool.request().input('id', sql.Int, id).query('DELETE FROM Roles WHERE id = @id');
+        await logAudit(req, 'role.delete', 'Role', id, { name: role.name });
         res.json({ message: "Rol uğurla silindi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -1066,7 +1744,7 @@ app.post('/api/warehouses', verifyToken, requirePermission('warehouses.manage'),
     }
 
     try {
-        await pool.request()
+        const insertResult = await pool.request()
             .input('name', sql.NVarChar, name.trim())
             .input('country', sql.NVarChar, country.trim())
             .input('flag', sql.NVarChar, flag || null)
@@ -1078,8 +1756,10 @@ app.post('/api/warehouses', verifyToken, requirePermission('warehouses.manage'),
             .input('ratePerKg', sql.Decimal(10, 2), rate)
             .query(`
                 INSERT INTO Warehouses (name, country, flag, addressLine1, addressLine2, city, postalCode, phone, ratePerKg, isActive)
+                OUTPUT INSERTED.id
                 VALUES (@name, @country, @flag, @addressLine1, @addressLine2, @city, @postalCode, @phone, @ratePerKg, 1)
             `);
+        await logAudit(req, 'warehouse.create', 'Warehouse', insertResult.recordset[0].id, { name: name.trim(), ratePerKg: rate });
         res.status(201).json({ message: "Anbar uğurla yaradıldı!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -1120,6 +1800,7 @@ app.put('/api/warehouses/:id', verifyToken, requirePermission('warehouses.manage
                     ratePerKg = @ratePerKg, isActive = @isActive
                 WHERE id = @id
             `);
+        await logAudit(req, 'warehouse.update', 'Warehouse', id, { name: name.trim(), ratePerKg: rate, isActive: isActive !== false });
         res.json({ message: "Anbar uğurla yeniləndi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -1130,8 +1811,296 @@ app.put('/api/warehouses/:id', verifyToken, requirePermission('warehouses.manage
 app.delete('/api/warehouses/:id', verifyToken, requirePermission('warehouses.manage'), async (req, res) => {
     const { id } = req.params;
     try {
+        const existing = await pool.request().input('id', sql.Int, id).query('SELECT name FROM Warehouses WHERE id = @id');
         await pool.request().input('id', sql.Int, id).query('DELETE FROM Warehouses WHERE id = @id');
+        await logAudit(req, 'warehouse.delete', 'Warehouse', id, { name: existing.recordset[0]?.name });
         res.json({ message: "Anbar uğurla silindi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 📋 AUDIT LOG (Admin əməliyyatlarının qeydiyyatı)
+// ==========================================
+
+app.get('/api/audit-log', verifyToken, requirePermission('audit.view'), async (req, res) => {
+    try {
+        const actionFilter = req.query.action;
+        const targetTypeFilter = req.query.targetType;
+
+        let query = `
+            SELECT TOP 200 a.id, a.userId, a.userRole, a.action, a.targetType, a.targetId, a.details, a.createdAt,
+                   u.firstName, u.lastName, u.email
+            FROM AuditLog a
+            LEFT JOIN Users u ON u.id = a.userId
+            WHERE 1 = 1
+        `;
+        const request = pool.request();
+
+        if (actionFilter) {
+            query += ' AND a.action = @action';
+            request.input('action', sql.NVarChar, actionFilter);
+        }
+        if (targetTypeFilter) {
+            query += ' AND a.targetType = @targetType';
+            request.input('targetType', sql.NVarChar, targetTypeFilter);
+        }
+        query += ' ORDER BY a.createdAt DESC';
+
+        const result = await request.query(query);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🔔 BİLDİRİŞ MƏRKƏZİ (NOTIFICATIONS)
+// ==========================================
+
+// 1. Cari istifadəçinin bildirişləri
+app.get('/api/notifications', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query(`
+                SELECT TOP 50 id, title, message, type, isRead, createdAt
+                FROM Notifications
+                WHERE userId = @userId
+                ORDER BY createdAt DESC
+            `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Oxunmamış bildiriş sayı (bell badge üçün)
+app.get('/api/notifications/unread-count', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('SELECT COUNT(*) as count FROM Notifications WHERE userId = @userId AND isRead = 0');
+        res.json({ count: result.recordset[0].count });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Tək bildirişi oxunmuş kimi işarələ
+app.put('/api/notifications/:id/read', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('userId', sql.Int, req.user.id)
+            .query('UPDATE Notifications SET isRead = 1 WHERE id = @id AND userId = @userId');
+        res.json({ message: "Bildiriş oxunmuş kimi işarələndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Bütün bildirişləri oxunmuş kimi işarələ
+app.put('/api/notifications/read-all', verifyToken, async (req, res) => {
+    try {
+        await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('UPDATE Notifications SET isRead = 1 WHERE userId = @userId AND isRead = 0');
+        res.json({ message: "Bütün bildirişlər oxunmuş kimi işarələndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🎫 DƏSTƏK TİKETLƏRİ (SUPPORT TICKETS)
+// ==========================================
+
+// 1. Yeni tiket yarat (ilk mesajla birlikdə)
+app.post('/api/support/tickets', verifyToken, async (req, res) => {
+    const { subject, message } = req.body;
+
+    if (!subject || !subject.trim() || !message || !message.trim()) {
+        return res.status(400).json({ message: "Mövzu və mesaj qeyd edilməlidir!" });
+    }
+
+    try {
+        const insertResult = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('subject', sql.NVarChar, subject.trim())
+            .query(`
+                INSERT INTO SupportTickets (userId, subject, status)
+                OUTPUT INSERTED.id
+                VALUES (@userId, @subject, N'Açıq')
+            `);
+        const ticketId = insertResult.recordset[0].id;
+
+        await pool.request()
+            .input('ticketId', sql.Int, ticketId)
+            .input('senderId', sql.Int, req.user.id)
+            .input('message', sql.NVarChar, message.trim())
+            .query('INSERT INTO SupportTicketMessages (ticketId, senderId, message) VALUES (@ticketId, @senderId, @message)');
+
+        res.status(201).json({ message: "Tiket yaradıldı", ticketId });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Tiketlərin siyahısı (icazəyə görə hamısı və ya yalnız öz tiketləri)
+app.get('/api/support/tickets', verifyToken, async (req, res) => {
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('support.viewAll');
+
+        let query = `
+            SELECT t.id, t.subject, t.status, t.createdAt, t.updatedAt,
+                   u.firstName, u.lastName, u.email,
+                   (SELECT COUNT(*) FROM SupportTicketMessages m WHERE m.ticketId = t.id) as messageCount
+            FROM SupportTickets t
+            JOIN Users u ON u.id = t.userId
+        `;
+        const request = pool.request();
+        if (!canViewAll) {
+            query += ' WHERE t.userId = @userId';
+            request.input('userId', sql.Int, req.user.id);
+        }
+        query += ' ORDER BY t.updatedAt DESC';
+
+        const result = await request.query(query);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Tiket detalı (mesaj tarixçəsi ilə)
+app.get('/api/support/tickets/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('support.viewAll');
+
+        const ticketResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query(`
+                SELECT t.id, t.subject, t.status, t.userId, t.createdAt, t.updatedAt, u.firstName, u.lastName, u.email
+                FROM SupportTickets t JOIN Users u ON u.id = t.userId
+                WHERE t.id = @id
+            `);
+
+        if (ticketResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Tiket tapılmadı" });
+        }
+        const ticket = ticketResult.recordset[0];
+        if (!canViewAll && ticket.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu tiketə baxmaq icazəniz yoxdur" });
+        }
+
+        const messagesResult = await pool.request()
+            .input('ticketId', sql.Int, id)
+            .query(`
+                SELECT m.id, m.message, m.createdAt, m.senderId, u.firstName, u.lastName, u.role
+                FROM SupportTicketMessages m JOIN Users u ON u.id = m.senderId
+                WHERE m.ticketId = @ticketId
+                ORDER BY m.createdAt ASC
+            `);
+
+        res.json({ ticket, messages: messagesResult.recordset });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Tiketə cavab yaz
+app.post('/api/support/tickets/:id/messages', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+        return res.status(400).json({ message: "Mesaj boş ola bilməz!" });
+    }
+
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('support.viewAll');
+
+        const ticketResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, status, subject FROM SupportTickets WHERE id = @id');
+
+        if (ticketResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Tiket tapılmadı" });
+        }
+        const ticket = ticketResult.recordset[0];
+        if (!canViewAll && ticket.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu tiketə cavab yazmaq icazəniz yoxdur" });
+        }
+
+        await pool.request()
+            .input('ticketId', sql.Int, id)
+            .input('senderId', sql.Int, req.user.id)
+            .input('message', sql.NVarChar, message.trim())
+            .query('INSERT INTO SupportTicketMessages (ticketId, senderId, message) VALUES (@ticketId, @senderId, @message)');
+
+        const isStaffReply = canViewAll && req.user.id !== ticket.userId;
+        const newStatus = isStaffReply && ticket.status === 'Açıq' ? 'İşlənir' : ticket.status;
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('status', sql.NVarChar, newStatus)
+            .query('UPDATE SupportTickets SET updatedAt = GETDATE(), status = @status WHERE id = @id');
+
+        if (isStaffReply) {
+            await createInAppNotification(
+                ticket.userId,
+                'Dəstək tiketinizə cavab verildi',
+                `"${ticket.subject}" mövzulu tiketinizə yeni cavab var.`,
+                'support_reply'
+            );
+        }
+
+        res.status(201).json({ message: "Cavab göndərildi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Tiket statusunu dəyiş (yalnız dəstək icazəsi olanlar)
+app.put('/api/support/tickets/:id/status', verifyToken, requirePermission('support.viewAll'), async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowedStatuses = ['Açıq', 'İşlənir', 'Bağlı'];
+
+    if (!status || !allowedStatuses.includes(status)) {
+        return res.status(400).json({ message: "Düzgün status seçin" });
+    }
+
+    try {
+        const ticketResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, subject FROM SupportTickets WHERE id = @id');
+
+        if (ticketResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Tiket tapılmadı" });
+        }
+        const ticket = ticketResult.recordset[0];
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('status', sql.NVarChar, status)
+            .query('UPDATE SupportTickets SET status = @status, updatedAt = GETDATE() WHERE id = @id');
+
+        await createInAppNotification(
+            ticket.userId,
+            'Dəstək tiketinizin statusu dəyişdi',
+            `"${ticket.subject}" mövzulu tiketinizin yeni statusu: ${status}`,
+            'support_status'
+        );
+
+        res.json({ message: "Tiket statusu yeniləndi" });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

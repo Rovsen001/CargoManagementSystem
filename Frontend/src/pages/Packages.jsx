@@ -10,7 +10,9 @@ import {
     Card,
     Loader,
     RadioButton,
-    Icon
+    Icon,
+    Checkbox,
+    Pagination
 } from '@gravity-ui/uikit';
 import {
     Magnifier,
@@ -19,9 +21,16 @@ import {
     ArrowDownToSquare,
     Pencil,
     ArrowRotateLeft,
-    Xmark
+    Xmark,
+    Clock,
+    PersonWorker,
+    QrCode,
+    ShieldCheck,
+    FileText
 } from '@gravity-ui/icons';
 import api from '../services/api';
+import BarcodeModal from '../components/Packages/BarcodeModal';
+import { generateCommercialInvoice } from '../utils/commercialInvoice';
 
 const Packages = () => {
     // Daxil olan istifadəçini localStroage-dən götürürük
@@ -31,16 +40,24 @@ const Packages = () => {
     const canChangeStatus = hasPermission('packages.changeStatus');
     const canRestore = hasPermission('packages.restore');
     const canHardDelete = hasPermission('packages.hardDelete');
+    const canAssignCourier = hasPermission('packages.assignCourier');
+    const isCourierUser = hasPermission('packages.viewAssigned');
+
+    const PAGE_SIZE = 15;
 
     const [packages, setPackages] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
+    const [warehouses, setWarehouses] = useState([]);
 
     const [activeTab, setActiveTab] = useState('active');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedStatus, setSelectedStatus] = useState(['ALL']);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [addFormData, setAddFormData] = useState({ trackingNumber: '', weight: '', price: '' });
+    const [addFormData, setAddFormData] = useState({ trackingNumber: '', weight: '', warehouseId: '', isInsured: false, declaredValue: '', hsCode: '', itemDescription: '', countryOfOrigin: '' });
+    const INSURANCE_RATE = 0.02;
 
     // Çəki/Qiymət ədəd sahələrinin düzgün, mənfi olmayan rəqəm olduğunu yoxlayır
     const validateNonNegativeNumber = (value, fieldName) => {
@@ -51,22 +68,67 @@ const Packages = () => {
     };
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [editFormData, setEditFormData] = useState({ id: null, trackingNumber: '', weight: '', price: '', status: '' });
+    const [editFormData, setEditFormData] = useState({ id: null, trackingNumber: '', weight: '', price: '', status: '', warehouseId: '', isInsured: false, declaredValue: '', hsCode: '', itemDescription: '', countryOfOrigin: '' });
 
-    // Bazadan Məlumatları Çəkmək (Rola uyğun olaraq)
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyData, setHistoryData] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyTrackingNumber, setHistoryTrackingNumber] = useState('');
+
+    const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+    const [barcodeTarget, setBarcodeTarget] = useState(null);
+
+    const [couriers, setCouriers] = useState([]);
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+    const [assignTarget, setAssignTarget] = useState(null);
+    const [assignCourierId, setAssignCourierId] = useState('');
+    const [assignSaving, setAssignSaving] = useState(false);
+
+    const openBarcodeModal = (item) => {
+        setBarcodeTarget(item);
+        setIsBarcodeModalOpen(true);
+    };
+
+    const openHistoryModal = async (item) => {
+        setHistoryTrackingNumber(item.trackingNumber);
+        setIsHistoryModalOpen(true);
+        setHistoryLoading(true);
+        try {
+            const response = await api.get(`/packages/${item.id}/history`);
+            setHistoryData(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+            console.error("Tarixçə çəkilərkən xəta:", error);
+            setHistoryData([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    // Bazadan Məlumatları Çəkmək (Rola uyğun olaraq, səhifələnmə və server-tərəfli filtrlərlə)
     const fetchPackages = async () => {
         setLoading(true);
         try {
             const isArchived = activeTab === 'archived';
-            const response = await api.get(`/packages?archived=${isArchived}&userId=${currentUser.id}&role=${currentUser.role}`);
-            if (Array.isArray(response.data)) {
-                setPackages(response.data);
+            const response = await api.get('/packages', {
+                params: {
+                    archived: isArchived,
+                    page,
+                    limit: PAGE_SIZE,
+                    search: searchQuery.trim() || undefined,
+                    status: selectedStatus[0] !== 'ALL' ? selectedStatus[0] : undefined
+                }
+            });
+            if (Array.isArray(response.data?.data)) {
+                setPackages(response.data.data);
+                setTotal(response.data.total || 0);
             } else {
                 setPackages([]);
+                setTotal(0);
             }
         } catch (error) {
             console.error("Məlumat çəkilərkən xəta:", error);
             setPackages([]);
+            setTotal(0);
         } finally {
             setLoading(false);
         }
@@ -74,25 +136,122 @@ const Packages = () => {
 
     useEffect(() => {
         fetchPackages();
-    }, [activeTab]);
+    }, [activeTab, page, searchQuery, selectedStatus]);
 
-    // Yeni Bağlama Yaratmaq (userId əlavə olunur)
+    const handleTabChange = (val) => {
+        setActiveTab(val);
+        setPage(1);
+    };
+
+    const handleSearchChange = (value) => {
+        setSearchQuery(value);
+        setPage(1);
+    };
+
+    const handleStatusFilterChange = (val) => {
+        setSelectedStatus(val);
+        setPage(1);
+    };
+
+    useEffect(() => {
+        const fetchWarehouses = async () => {
+            try {
+                const response = await api.get('/warehouses');
+                setWarehouses(Array.isArray(response.data) ? response.data : []);
+            } catch (error) {
+                console.error("Anbarlar çəkilərkən xəta:", error);
+            }
+        };
+        fetchWarehouses();
+    }, []);
+
+    useEffect(() => {
+        if (!canAssignCourier) return;
+        const fetchCouriers = async () => {
+            try {
+                const response = await api.get('/couriers');
+                setCouriers(Array.isArray(response.data) ? response.data : []);
+            } catch (error) {
+                console.error("Kuryerlər çəkilərkən xəta:", error);
+            }
+        };
+        fetchCouriers();
+    }, [canAssignCourier]);
+
+    const openAssignModal = (item) => {
+        setAssignTarget(item);
+        setAssignCourierId(item.assignedCourierId ? String(item.assignedCourierId) : '');
+        setIsAssignModalOpen(true);
+    };
+
+    const handleAssignCourier = async () => {
+        if (!assignTarget) return;
+        setAssignSaving(true);
+        try {
+            await api.put(`/packages/${assignTarget.id}/assign-courier`, {
+                courierId: assignCourierId || null
+            });
+            setIsAssignModalOpen(false);
+            fetchPackages();
+        } catch (error) {
+            alert(error.response?.data?.message || "Kuryer təyin edilərkən xəta baş verdi.");
+        } finally {
+            setAssignSaving(false);
+        }
+    };
+
+    const handleCourierStatusUpdate = async (id, newStatus) => {
+        try {
+            await api.put(`/packages/${id}/courier-status`, { status: newStatus });
+            fetchPackages();
+        } catch (error) {
+            alert(error.response?.data?.message || "Status yenilənərkən xəta baş verdi.");
+        }
+    };
+
+    const selectedWarehouseRate = (whId) => {
+        const wh = warehouses.find(w => w.id === whId);
+        return wh ? parseFloat(wh.ratePerKg) : 0;
+    };
+
+    const estimatedPrice = (weight, whId) => {
+        const w = parseFloat(weight) || 0;
+        const rate = selectedWarehouseRate(Number(whId));
+        return (w * rate).toFixed(2);
+    };
+
+    const estimatedInsuranceFee = (declaredValue) => {
+        const v = parseFloat(declaredValue) || 0;
+        return (v * INSURANCE_RATE).toFixed(2);
+    };
+
+    // Yeni Bağlama Yaratmaq (qiymət sistemin özü tərəfindən çəki × anbar tarifinə görə hesablanır)
     const handleCreate = async () => {
         if (!addFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
         const weightError = validateNonNegativeNumber(addFormData.weight, "Çəki");
         if (weightError) return alert(weightError);
-        const priceError = validateNonNegativeNumber(addFormData.price, "Qiymət");
-        if (priceError) return alert(priceError);
+        if (!addFormData.warehouseId) return alert("Anbar seçin!");
+        if (addFormData.isInsured) {
+            const declaredValueError = validateNonNegativeNumber(addFormData.declaredValue, "Bəyan edilmiş dəyər");
+            if (declaredValueError || parseFloat(addFormData.declaredValue) <= 0) return alert("Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!");
+        }
         try {
             await api.post('/packages', {
-                ...addFormData,
-                userId: currentUser.id
+                trackingNumber: addFormData.trackingNumber,
+                weight: addFormData.weight,
+                warehouseId: addFormData.warehouseId,
+                isInsured: addFormData.isInsured,
+                declaredValue: addFormData.declaredValue,
+                hsCode: addFormData.hsCode,
+                itemDescription: addFormData.itemDescription,
+                countryOfOrigin: addFormData.countryOfOrigin
             });
             setIsAddModalOpen(false);
-            setAddFormData({ trackingNumber: '', weight: '', price: '' });
+            setAddFormData({ trackingNumber: '', weight: '', warehouseId: '', isInsured: false, declaredValue: '', hsCode: '', itemDescription: '', countryOfOrigin: '' });
             fetchPackages();
         } catch (error) {
             console.error("Yaradılarkən xəta:", error);
+            alert(error.response?.data?.message || "Bağlama yaradılarkən xəta baş verdi.");
         }
     };
 
@@ -100,8 +259,14 @@ const Packages = () => {
         if (!editFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
         const weightError = validateNonNegativeNumber(editFormData.weight, "Çəki");
         if (weightError) return alert(weightError);
-        const priceError = validateNonNegativeNumber(editFormData.price, "Qiymət");
-        if (priceError) return alert(priceError);
+        if (canChangeStatus) {
+            const priceError = validateNonNegativeNumber(editFormData.price, "Qiymət");
+            if (priceError) return alert(priceError);
+        }
+        if (editFormData.isInsured) {
+            const declaredValueError = validateNonNegativeNumber(editFormData.declaredValue, "Bəyan edilmiş dəyər");
+            if (declaredValueError || parseFloat(editFormData.declaredValue) <= 0) return alert("Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!");
+        }
         try {
             await api.put(`/packages/${editFormData.id}`, editFormData);
             setIsEditModalOpen(false);
@@ -117,7 +282,13 @@ const Packages = () => {
             trackingNumber: item.trackingNumber || '',
             weight: item.weight || '',
             price: item.price || '',
-            status: item.status || 'Bəyan edildi'
+            status: item.status || 'Bəyan edildi',
+            warehouseId: item.warehouseId || '',
+            isInsured: Boolean(item.isInsured),
+            declaredValue: item.declaredValue || '',
+            hsCode: item.hsCode || '',
+            itemDescription: item.itemDescription || '',
+            countryOfOrigin: item.countryOfOrigin || ''
         });
         setIsEditModalOpen(true);
     };
@@ -162,13 +333,8 @@ const Packages = () => {
         }
     };
 
-    const safePackages = Array.isArray(packages) ? packages : [];
-    const filteredPackages = safePackages.filter((pkg) => {
-        const matchesSearch = pkg.trackingNumber?.toLowerCase().includes(searchQuery.toLowerCase().trim());
-        const currentFilter = selectedStatus[0] || 'ALL';
-        const matchesStatus = currentFilter === 'ALL' || pkg.status === currentFilter;
-        return matchesSearch && matchesStatus;
-    });
+    // Axtarış və status filtri artıq serverdə tətbiq olunur (bax: fetchPackages)
+    const filteredPackages = Array.isArray(packages) ? packages : [];
 
     const handleExportExcel = () => {
         if (filteredPackages.length === 0) return alert("Eksport üçün məlumat yoxdur!");
@@ -216,8 +382,14 @@ const Packages = () => {
     };
 
     const renderStatusBadge = (status) => {
-        const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success' };
+        const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success', 'Təhvil verildi': 'success' };
         return <Label theme={themeMap[status] || 'normal'}>{status || 'Təyin edilməyib'}</Label>;
+    };
+
+    const courierName = (courierId) => {
+        if (!courierId) return null;
+        const c = couriers.find((c) => c.id === courierId);
+        return c ? `${c.firstName} ${c.lastName}` : `#${courierId}`;
     };
 
     const columns = [
@@ -225,7 +397,21 @@ const Packages = () => {
         { id: 'trackingNumber', name: 'Trek Nömrəsi', template: (item) => <strong>{item.trackingNumber}</strong> },
         { id: 'weight', name: 'Çəki (kq)', template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
         { id: 'price', name: 'Qiymət ($)', template: (item) => `$${parseFloat(item.price).toFixed(2)}` },
+        {
+            id: 'insurance',
+            name: 'Sığorta',
+            template: (item) => item.isInsured
+                ? <Label theme="success" icon={<Icon data={ShieldCheck} size={14} />}>${parseFloat(item.declaredValue).toFixed(2)}</Label>
+                : <Text color="secondary">—</Text>
+        },
         { id: 'status', name: 'Status', template: (item) => renderStatusBadge(item.status) },
+        ...(canAssignCourier ? [{
+            id: 'courier',
+            name: 'Kuryer',
+            template: (item) => courierName(item.assignedCourierId)
+                ? <Label theme="normal">{courierName(item.assignedCourierId)}</Label>
+                : <Text color="secondary">Təyin edilməyib</Text>
+        }] : []),
         {
             id: 'createdAt',
             name: 'Tarix',
@@ -237,6 +423,27 @@ const Packages = () => {
             template: (item) => (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {activeTab === 'active' ? (
+                        isCourierUser ? (
+                            <>
+                                <Select
+                                    value={[item.status || 'Yoldadır']}
+                                    onUpdate={(val) => handleCourierStatusUpdate(item.id, val[0])}
+                                    options={[
+                                        { value: 'Yoldadır', content: 'Yoldadır' },
+                                        { value: 'Gömrükdə', content: 'Gömrükdə' },
+                                        { value: 'Filialda', content: 'Filialda' },
+                                        { value: 'Təhvil verildi', content: 'Təhvil verildi' }
+                                    ]}
+                                    size="s"
+                                />
+                                <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title="Tarixçəyə Bax">
+                                    <Icon data={Clock} />
+                                </Button>
+                                <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title="Barkod / QR Kod">
+                                    <Icon data={QrCode} />
+                                </Button>
+                            </>
+                        ) : (
                         <>
                             {/* STATUS SELECT - Yalnız icazəsi olanlar üçün */}
                             {canChangeStatus && (
@@ -255,10 +462,25 @@ const Packages = () => {
                             <Button view="flat-secondary" size="s" onClick={() => openEditModal(item)} title="Redaktə Et">
                                 <Icon data={Pencil} />
                             </Button>
+                            <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title="Tarixçəyə Bax">
+                                <Icon data={Clock} />
+                            </Button>
+                            <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title="Barkod / QR Kod">
+                                <Icon data={QrCode} />
+                            </Button>
+                            <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title="Kommersiya Fakturası (PDF)">
+                                <Icon data={FileText} />
+                            </Button>
+                            {canAssignCourier && (
+                                <Button view="flat-secondary" size="s" onClick={() => openAssignModal(item)} title="Kuryer Təyin Et">
+                                    <Icon data={PersonWorker} />
+                                </Button>
+                            )}
                             <Button view="flat-warning" size="s" onClick={() => handleSoftDelete(item.id)} title="Zibil Qutusuna At">
                                 <Icon data={TrashBin} />
                             </Button>
                         </>
+                        )
                     ) : (
                         <>
                             {/* Bərpa və Tam silmə - icazəyə görə ayrı-ayrı */}
@@ -285,10 +507,10 @@ const Packages = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <Text variant="header-2" className="gradient-text">
-                        {canViewAll ? "Bütün Bağlamalar" : "Mənim Bağlamalarım"}
+                        {isCourierUser ? "Mənə Təyin Olunmuş Bağlamalar" : canViewAll ? "Bütün Bağlamalar" : "Mənim Bağlamalarım"}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                        {canViewAll ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
+                        {isCourierUser ? "Sizə həvalə edilmiş bağlamaların statusunu yeniləyin." : canViewAll ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
                     </Text>
                 </div>
 
@@ -298,7 +520,7 @@ const Packages = () => {
                         Excel-ə Çıxar (.xls)
                     </Button>
 
-                    {activeTab === 'active' && (
+                    {activeTab === 'active' && !isCourierUser && (
                         <Button
                             view="action"
                             size="l"
@@ -317,7 +539,7 @@ const Packages = () => {
                 <RadioButton
                     size="l"
                     value={activeTab}
-                    onUpdate={(val) => setActiveTab(val)}
+                    onUpdate={handleTabChange}
                     options={[
                         { value: 'active', content: 'Aktiv Bağlamalar' },
                         { value: 'archived', content: 'Zibil Qutusu (Arxiv)' }
@@ -330,7 +552,7 @@ const Packages = () => {
                     <TextInput
                         placeholder="Trek nömrəsi ilə canlı axtarış..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                         hasClearable
                         size="l"
                         leftContent={<Icon data={Magnifier} style={{ marginLeft: '10px' }} />}
@@ -340,7 +562,7 @@ const Packages = () => {
                 <div style={{ flex: 1, minWidth: '180px' }}>
                     <Select
                         value={selectedStatus}
-                        onUpdate={(val) => setSelectedStatus(val)}
+                        onUpdate={handleStatusFilterChange}
                         options={[
                             { value: 'ALL', content: 'Bütün Statuslar' },
                             { value: 'Bəyan edildi', content: 'Bəyan edildi' },
@@ -354,7 +576,7 @@ const Packages = () => {
                 </div>
 
                 {(searchQuery || selectedStatus[0] !== 'ALL') && (
-                    <Button view="flat" size="l" onClick={() => { setSearchQuery(''); setSelectedStatus(['ALL']); }}>
+                    <Button view="flat" size="l" onClick={() => { handleSearchChange(''); handleStatusFilterChange(['ALL']); }}>
                         Sıfırla
                     </Button>
                 )}
@@ -362,7 +584,7 @@ const Packages = () => {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
                 <Text variant="caption-2" color="secondary">
-                    Göstərilir: <strong>{filteredPackages.length}</strong> / {safePackages.length} bağlama
+                    Göstərilir: <strong>{filteredPackages.length}</strong> / {total} bağlama
                 </Text>
             </div>
 
@@ -380,6 +602,17 @@ const Packages = () => {
                 )}
             </Card>
 
+            {total > PAGE_SIZE && (
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <Pagination
+                        page={page}
+                        pageSize={PAGE_SIZE}
+                        total={total}
+                        onUpdate={(newPage) => setPage(newPage)}
+                    />
+                </div>
+            )}
+
             {/* MODALLAR */}
             <Modal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -389,12 +622,58 @@ const Packages = () => {
                         <TextInput placeholder="Məs: AZ12345678" value={addFormData.trackingNumber} onChange={(e) => setAddFormData({ ...addFormData, trackingNumber: e.target.value })} />
                     </div>
                     <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Xarici Anbar *</Text>
+                        <Select
+                            value={addFormData.warehouseId ? [String(addFormData.warehouseId)] : []}
+                            onUpdate={(val) => setAddFormData({ ...addFormData, warehouseId: val[0] })}
+                            options={warehouses.map((w) => ({ value: String(w.id), content: `${w.flag || ''} ${w.name} ($${parseFloat(w.ratePerKg).toFixed(2)}/kq)` }))}
+                            placeholder="Anbar seçin"
+                            width="max"
+                        />
+                    </div>
+                    <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Çəki (kq)</Text>
                         <TextInput type="number" min="0" step="0.01" placeholder="Məs: 1.5" value={addFormData.weight} onChange={(e) => setAddFormData({ ...addFormData, weight: e.target.value })} />
                     </div>
+                    {addFormData.weight && addFormData.warehouseId && (
+                        <div style={{ padding: '10px 14px', backgroundColor: '#0d1117', borderRadius: '8px', border: '1px solid #21262d' }}>
+                            <Text variant="caption-2" color="secondary">Təxmini Qiymət (avtomatik hesablanır)</Text>
+                            <Text variant="subheader-2" style={{ display: 'block', color: '#56d364' }}>
+                                ${estimatedPrice(addFormData.weight, addFormData.warehouseId)}
+                            </Text>
+                        </div>
+                    )}
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
-                        <TextInput type="number" min="0" step="0.01" placeholder="Məs: 12.50" value={addFormData.price} onChange={(e) => setAddFormData({ ...addFormData, price: e.target.value })} />
+                        <Checkbox
+                            checked={addFormData.isInsured}
+                            onUpdate={(checked) => setAddFormData({ ...addFormData, isInsured: checked })}
+                        >
+                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> Bağlamanı sığortala ({(INSURANCE_RATE * 100).toFixed(0)}% haqq)
+                        </Checkbox>
+                    </div>
+                    {addFormData.isInsured && (
+                        <div>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bəyan Edilmiş Dəyər ($) *</Text>
+                            <TextInput type="number" min="0" step="0.01" placeholder="Məs: 100" value={addFormData.declaredValue} onChange={(e) => setAddFormData({ ...addFormData, declaredValue: e.target.value })} />
+                            {addFormData.declaredValue && (
+                                <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
+                                    Sığorta haqqı: ${estimatedInsuranceFee(addFormData.declaredValue)}
+                                </Text>
+                            )}
+                        </div>
+                    )}
+                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>Gömrük Məlumatları (könüllü)</Text>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>HS Kodu</Text>
+                        <TextInput placeholder="Məs: 6109.10" value={addFormData.hsCode} onChange={(e) => setAddFormData({ ...addFormData, hsCode: e.target.value })} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mal Təsviri</Text>
+                        <TextInput placeholder="Məs: Pambıq t-shirt" value={addFormData.itemDescription} onChange={(e) => setAddFormData({ ...addFormData, itemDescription: e.target.value })} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mənşə Ölkəsi</Text>
+                        <TextInput placeholder="Məs: Türkiyə" value={addFormData.countryOfOrigin} onChange={(e) => setAddFormData({ ...addFormData, countryOfOrigin: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                         <Button view="flat" onClick={() => setIsAddModalOpen(false)}>Ləğv et</Button>
@@ -416,7 +695,16 @@ const Packages = () => {
                     </div>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
-                        <TextInput type="number" min="0" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
+                        {canChangeStatus ? (
+                            <TextInput type="number" min="0" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
+                        ) : (
+                            <div style={{ padding: '10px 14px', backgroundColor: '#0d1117', borderRadius: '8px', border: '1px solid #21262d' }}>
+                                <Text variant="subheader-2" style={{ color: '#56d364' }}>
+                                    ${estimatedPrice(editFormData.weight, editFormData.warehouseId)}
+                                </Text>
+                                <Text variant="caption-2" color="secondary" style={{ display: 'block' }}>Çəkiyə görə avtomatik hesablanır</Text>
+                            </div>
+                        )}
                     </div>
                     {canChangeStatus && (
                         <div>
@@ -434,12 +722,114 @@ const Packages = () => {
                             />
                         </div>
                     )}
+                    <div>
+                        <Checkbox
+                            checked={editFormData.isInsured}
+                            onUpdate={(checked) => setEditFormData({ ...editFormData, isInsured: checked })}
+                        >
+                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> Bağlamanı sığortala ({(INSURANCE_RATE * 100).toFixed(0)}% haqq)
+                        </Checkbox>
+                    </div>
+                    {editFormData.isInsured && (
+                        <div>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bəyan Edilmiş Dəyər ($) *</Text>
+                            <TextInput type="number" min="0" step="0.01" value={editFormData.declaredValue} onChange={(e) => setEditFormData({ ...editFormData, declaredValue: e.target.value })} />
+                            {editFormData.declaredValue && (
+                                <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
+                                    Sığorta haqqı: ${estimatedInsuranceFee(editFormData.declaredValue)}
+                                </Text>
+                            )}
+                        </div>
+                    )}
+                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>Gömrük Məlumatları (könüllü)</Text>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>HS Kodu</Text>
+                        <TextInput placeholder="Məs: 6109.10" value={editFormData.hsCode} onChange={(e) => setEditFormData({ ...editFormData, hsCode: e.target.value })} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mal Təsviri</Text>
+                        <TextInput placeholder="Məs: Pambıq t-shirt" value={editFormData.itemDescription} onChange={(e) => setEditFormData({ ...editFormData, itemDescription: e.target.value })} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mənşə Ölkəsi</Text>
+                        <TextInput placeholder="Məs: Türkiyə" value={editFormData.countryOfOrigin} onChange={(e) => setEditFormData({ ...editFormData, countryOfOrigin: e.target.value })} />
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                         <Button view="flat" onClick={() => setIsEditModalOpen(false)}>Ləğv et</Button>
                         <Button view="action" onClick={handleUpdate}>Yadda saxla</Button>
                     </div>
                 </div>
             </Modal>
+
+            <Modal open={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)}>
+                <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Status Tarixçəsi</Text>
+                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{historyTrackingNumber}</strong></Text>
+
+                    {historyLoading ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}><Loader size="m" /></div>
+                    ) : historyData.length === 0 ? (
+                        <Text color="secondary">Tarixçə tapılmadı.</Text>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {historyData.map((h, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{
+                                        width: '8px', height: '8px', borderRadius: '50%',
+                                        backgroundColor: idx === historyData.length - 1 ? '#a78bfa' : '#30363d',
+                                        flexShrink: 0
+                                    }} />
+                                    <Text variant="body-2" style={{ fontWeight: idx === historyData.length - 1 ? 600 : 400 }}>
+                                        {h.status}
+                                    </Text>
+                                    <Text variant="caption-2" color="secondary" style={{ marginLeft: 'auto' }}>
+                                        {new Date(h.changedAt).toLocaleString('az-AZ', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </Text>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                        <Button view="flat" onClick={() => setIsHistoryModalOpen(false)}>Bağla</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)}>
+                <div style={{ padding: '24px', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Kuryer Təyin Et</Text>
+                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{assignTarget?.trackingNumber}</strong></Text>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Kuryer</Text>
+                        <Select
+                            value={assignCourierId ? [assignCourierId] : []}
+                            onUpdate={(val) => setAssignCourierId(val[0] || '')}
+                            options={[
+                                { value: '', content: 'Təyinatı ləğv et' },
+                                ...couriers.map((c) => ({ value: String(c.id), content: `${c.firstName} ${c.lastName} (${c.email})` }))
+                            ]}
+                            placeholder="Kuryer seçin"
+                            width="max"
+                        />
+                        {couriers.length === 0 && (
+                            <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
+                                Sistemdə kuryer rolunda istifadəçi tapılmadı.
+                            </Text>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                        <Button view="flat" onClick={() => setIsAssignModalOpen(false)}>Ləğv et</Button>
+                        <Button view="action" onClick={handleAssignCourier} loading={assignSaving}>Yadda saxla</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <BarcodeModal
+                open={isBarcodeModalOpen}
+                onClose={() => setIsBarcodeModalOpen(false)}
+                pkg={barcodeTarget}
+            />
 
         </div>
     );

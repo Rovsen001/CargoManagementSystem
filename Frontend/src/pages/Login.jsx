@@ -8,6 +8,10 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const [awaiting2FA, setAwaiting2FA] = useState(false);
+    const [tempToken, setTempToken] = useState('');
+    const [twoFACode, setTwoFACode] = useState('');
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
@@ -16,6 +20,12 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
         try {
             const response = await api.post('/auth/login', { email, password });
 
+            if (response.data.requires2FA) {
+                setTempToken(response.data.tempToken);
+                setAwaiting2FA(true);
+                return;
+            }
+
             // Token və istifadəçi məlumatlarını brauzerin yaddaşına (localStorage) yazırıq
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -23,6 +33,25 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
             onLoginSuccess(response.data.user);
         } catch (err) {
             setError(err.response?.data?.message || 'Giriş zamanı xəta baş verdi!');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerify2FA = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
+        try {
+            const response = await api.post('/auth/2fa/login-verify', { tempToken, token: twoFACode });
+
+            localStorage.setItem('token', response.data.token);
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+
+            onLoginSuccess(response.data.user);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Doğrulama zamanı xəta baş verdi!');
         } finally {
             setLoading(false);
         }
@@ -47,9 +76,11 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
             >
 
                 <div>
-                    <Text variant="header-2" className="gradient-text">Xoş gəlmisiniz</Text>
+                    <Text variant="header-2" className="gradient-text">
+                        {awaiting2FA ? 'Doğrulama Kodu' : 'Xoş gəlmisiniz'}
+                    </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                        Davam etmək üçün hesabınıza daxil olun.
+                        {awaiting2FA ? 'Autentifikasiya tətbiqinizdəki 6 rəqəmli kodu daxil edin.' : 'Davam etmək üçün hesabınıza daxil olun.'}
                     </Text>
                 </div>
 
@@ -59,6 +90,33 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                     </div>
                 )}
 
+                {awaiting2FA ? (
+                    <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Doğrulama Kodu</Text>
+                            <TextInput
+                                placeholder="000000"
+                                value={twoFACode}
+                                onChange={(e) => setTwoFACode(e.target.value)}
+                                size="l"
+                                autoFocus
+                            />
+                        </div>
+                        <Button
+                            view="action"
+                            size="xl"
+                            type="submit"
+                            loading={loading}
+                            className="pill-btn"
+                            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
+                        >
+                            Təsdiqlə
+                        </Button>
+                        <Button view="flat" onClick={() => { setAwaiting2FA(false); setTwoFACode(''); setError(''); }}>
+                            Geri
+                        </Button>
+                    </form>
+                ) : (
                 <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
                         <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Email</Text>
@@ -101,7 +159,9 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                         Daxil ol
                     </Button>
                 </form>
+                )}
 
+                {!awaiting2FA && (
                 <div style={{ textAlign: 'center', marginTop: '10px' }}>
                     <Text variant="body-1" color="secondary">
                         Hesabınız yoxdur?{' '}
@@ -113,6 +173,7 @@ const Login = ({ onLoginSuccess, switchToRegister, switchToForgotPassword }) => 
                         </span>
                     </Text>
                 </div>
+                )}
 
             </Card>
         </div>

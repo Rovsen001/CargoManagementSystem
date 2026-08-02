@@ -3,6 +3,8 @@ import { ThemeProvider, Button, Text, Icon, Avatar, Label, Modal, TextInput, Car
 import { Box, Gear } from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import Navbar from './components/Navigation/Navbar';
+import NotificationBell from './components/Navigation/NotificationBell';
+import TwoFactorSettings from './components/Navigation/TwoFactorSettings';
 import Footer from './components/Footer/Footer';
 import PaymentModal from './components/Payment/PaymentModal';
 import WarehouseAddressesModal from './components/Home/WarehouseAddressesModal';
@@ -13,6 +15,8 @@ import Customers from './pages/Customers';
 import Reports from './pages/Reports';
 import Roles from './pages/Roles';
 import Warehouses from './pages/Warehouses';
+import AuditLog from './pages/AuditLog';
+import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -228,31 +232,34 @@ function App() {
                             </div>
                         </div>
 
-                        <div
-                            onClick={openProfile}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '6px 14px',
-                                backgroundColor: '#21262d',
-                                border: '1px solid #30363d',
-                                borderRadius: '30px',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                userSelect: 'none'
-                            }}
-                        >
-                            <Avatar
-                                text={getUserInitials()}
-                                size="m"
-                                theme="warning"
-                            />
-                            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '4px' }}>
-                                <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
-                                    {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
-                                </Text>
-                                <Label size="xs" theme="warning">{user.role}</Label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <NotificationBell />
+                            <div
+                                onClick={openProfile}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '6px 14px',
+                                    backgroundColor: '#21262d',
+                                    border: '1px solid #30363d',
+                                    borderRadius: '30px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    userSelect: 'none'
+                                }}
+                            >
+                                <Avatar
+                                    text={getUserInitials()}
+                                    size="m"
+                                    theme="warning"
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '4px' }}>
+                                    <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
+                                        {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
+                                    </Text>
+                                    <Label size="xs" theme="warning">{user.role}</Label>
+                                </div>
                             </div>
                         </div>
                     </header>
@@ -300,6 +307,13 @@ function App() {
                             >
                                 Maliyyə və Balans
                             </Button>
+                            <Button
+                                view={activePage === 'support' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('support')}
+                            >
+                                Dəstək
+                            </Button>
                             {hasPermission('users.view') && (
                                 <Button
                                     view={activePage === 'customers' ? 'action' : 'flat-secondary'}
@@ -336,6 +350,15 @@ function App() {
                                     Rollar
                                 </Button>
                             )}
+                            {hasPermission('audit.view') && (
+                                <Button
+                                    view={activePage === 'audit-log' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('audit-log')}
+                                >
+                                    Audit Qeydləri
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
@@ -362,6 +385,7 @@ function App() {
                                 )}
                                 {activePage === 'packages' && <Packages />}
                                 {activePage === 'finance' && <FinancePage />}
+                                {activePage === 'support' && <Support />}
                                 {activePage === 'warehouses' && <WarehouseAddressesModal user={user} />}
                                 {activePage === 'dashboard' && <Dashboard />}
                                 {activePage === 'customers' && (
@@ -381,6 +405,11 @@ function App() {
                                 )}
                                 {activePage === 'manage-warehouses' && (
                                     hasPermission('warehouses.manage') ? <Warehouses /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'audit-log' && (
+                                    hasPermission('audit.view') ? <AuditLog /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
@@ -543,6 +572,12 @@ function App() {
                                     Şifrəni Dəyişdir
                                 </Button>
                             </form>
+
+                            {(isSuperAdminUser || user.role === 'Admin') && (
+                                <div style={{ borderTop: '1px solid #30363d', paddingTop: '16px' }}>
+                                    <TwoFactorSettings />
+                                </div>
+                            )}
 
                             <div style={{ borderTop: '1px solid #30363d', paddingTop: '16px', display: 'flex', justifyContent: 'space-between' }}>
                                 <Button view="flat" onClick={() => setIsProfileOpen(false)}>Bağla</Button>

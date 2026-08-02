@@ -2,6 +2,7 @@
 import React from 'react';
 import { Button, Text, Avatar, Label, Icon } from '@gravity-ui/uikit';
 import { Box, Wallet, Plus, Gear, ArrowRightFromSquare, Globe } from '@gravity-ui/icons';
+import NotificationBell from './NotificationBell';
 
 const Navbar = ({
     user,
@@ -91,6 +92,13 @@ const Navbar = ({
                         >
                             Xarici Anbarlar
                         </Button>
+                        <Button
+                            view={activePage === 'support' ? 'action' : 'flat-secondary'}
+                            size="l"
+                            onClick={() => onNavigate('support')}
+                        >
+                            Dəstək
+                        </Button>
                     </>
                 )}
 
@@ -118,6 +126,8 @@ const Navbar = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 {user ? (
                     <>
+                        <NotificationBell />
+
                         {/* Interactive Balance Badge Pill */}
                         <div style={{
                             display: 'flex',
