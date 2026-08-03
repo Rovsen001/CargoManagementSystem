@@ -26,7 +26,8 @@ import {
     PersonWorker,
     QrCode,
     ShieldCheck,
-    FileText
+    FileText,
+    Layers
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
@@ -42,6 +43,7 @@ const Packages = () => {
     const canHardDelete = hasPermission('packages.hardDelete');
     const canAssignCourier = hasPermission('packages.assignCourier');
     const isCourierUser = hasPermission('packages.viewAssigned');
+    const canConsolidate = hasPermission('packages.editAll');
 
     const PAGE_SIZE = 15;
 
@@ -83,6 +85,13 @@ const Packages = () => {
     const [assignTarget, setAssignTarget] = useState(null);
     const [assignCourierId, setAssignCourierId] = useState('');
     const [assignSaving, setAssignSaving] = useState(false);
+
+    const [selectedForConsolidation, setSelectedForConsolidation] = useState([]);
+    const [isConsolidateModalOpen, setIsConsolidateModalOpen] = useState(false);
+    const [consolidateTrackingNumber, setConsolidateTrackingNumber] = useState('');
+    const [consolidateActualWeight, setConsolidateActualWeight] = useState('');
+    const [consolidateSaving, setConsolidateSaving] = useState(false);
+    const [consolidateError, setConsolidateError] = useState('');
 
     const openBarcodeModal = (item) => {
         setBarcodeTarget(item);
@@ -206,6 +215,50 @@ const Packages = () => {
             fetchPackages();
         } catch (error) {
             alert(error.response?.data?.message || "Status yenilənərkən xəta baş verdi.");
+        }
+    };
+
+    const toggleConsolidationSelect = (item) => {
+        setSelectedForConsolidation((prev) =>
+            prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+        );
+    };
+
+    const openConsolidateModal = () => {
+        setConsolidateTrackingNumber('');
+        setConsolidateActualWeight('');
+        setConsolidateError('');
+        setIsConsolidateModalOpen(true);
+    };
+
+    const selectedPackagesForConsolidation = packages.filter((p) => selectedForConsolidation.includes(p.id));
+    const totalDeclaredWeight = selectedPackagesForConsolidation.reduce((sum, p) => sum + (parseFloat(p.weight) || 0), 0);
+
+    const handleConsolidate = async () => {
+        setConsolidateError('');
+        if (!consolidateTrackingNumber.trim()) {
+            setConsolidateError('Yeni trek nömrəsini daxil edin!');
+            return;
+        }
+        const weightError = validateNonNegativeNumber(consolidateActualWeight, "Real çəki");
+        if (weightError || parseFloat(consolidateActualWeight) <= 0) {
+            setConsolidateError('Real çəki müsbət rəqəm olmalıdır!');
+            return;
+        }
+        setConsolidateSaving(true);
+        try {
+            await api.post('/packages/consolidate', {
+                packageIds: selectedForConsolidation,
+                trackingNumber: consolidateTrackingNumber,
+                actualWeight: consolidateActualWeight
+            });
+            setIsConsolidateModalOpen(false);
+            setSelectedForConsolidation([]);
+            fetchPackages();
+        } catch (error) {
+            setConsolidateError(error.response?.data?.message || "Konsolidasiya edilərkən xəta baş verdi.");
+        } finally {
+            setConsolidateSaving(false);
         }
     };
 
@@ -382,8 +435,14 @@ const Packages = () => {
     };
 
     const renderStatusBadge = (status) => {
-        const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success', 'Təhvil verildi': 'success' };
+        const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success', 'Təhvil verildi': 'success', 'Konsolidasiya edildi': 'utility' };
         return <Label theme={themeMap[status] || 'normal'}>{status || 'Təyin edilməyib'}</Label>;
+    };
+
+    const consolidationTargetTrackingNumber = (consolidatedIntoId) => {
+        if (!consolidatedIntoId) return null;
+        const target = packages.find((p) => p.id === consolidatedIntoId);
+        return target ? target.trackingNumber : `#${consolidatedIntoId}`;
     };
 
     const courierName = (courierId) => {
@@ -393,6 +452,17 @@ const Packages = () => {
     };
 
     const columns = [
+        ...(canConsolidate && activeTab === 'active' ? [{
+            id: 'select',
+            name: '',
+            meta: { width: '40px' },
+            template: (item) => item.consolidatedIntoId ? null : (
+                <Checkbox
+                    checked={selectedForConsolidation.includes(item.id)}
+                    onUpdate={() => toggleConsolidationSelect(item)}
+                />
+            )
+        }] : []),
         { id: 'id', name: 'ID', meta: { width: '60px' } },
         { id: 'trackingNumber', name: 'Trek Nömrəsi', template: (item) => <strong>{item.trackingNumber}</strong> },
         { id: 'weight', name: 'Çəki (kq)', template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
@@ -404,7 +474,20 @@ const Packages = () => {
                 ? <Label theme="success" icon={<Icon data={ShieldCheck} size={14} />}>${parseFloat(item.declaredValue).toFixed(2)}</Label>
                 : <Text color="secondary">—</Text>
         },
-        { id: 'status', name: 'Status', template: (item) => renderStatusBadge(item.status) },
+        {
+            id: 'status',
+            name: 'Status',
+            template: (item) => (
+                <div>
+                    {renderStatusBadge(item.status)}
+                    {item.consolidatedIntoId && (
+                        <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
+                            → {consolidationTargetTrackingNumber(item.consolidatedIntoId)}
+                        </Text>
+                    )}
+                </div>
+            )
+        },
         ...(canAssignCourier ? [{
             id: 'courier',
             name: 'Kuryer',
@@ -534,6 +617,18 @@ const Packages = () => {
                     )}
                 </div>
             </div>
+
+            {canConsolidate && selectedForConsolidation.length >= 2 && (
+                <Card style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6' }}>
+                    <Text variant="body-2">{selectedForConsolidation.length} bağlama seçildi (ümumi bəyan edilmiş çəki: {totalDeclaredWeight.toFixed(2)} kq)</Text>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <Button view="flat" size="s" onClick={() => setSelectedForConsolidation([])}>Seçimi Ləğv Et</Button>
+                        <Button view="action" size="s" onClick={openConsolidateModal}>
+                            <Icon data={Layers} /> Konsolidasiya Et
+                        </Button>
+                    </div>
+                </Card>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center' }}>
                 <RadioButton
@@ -830,6 +925,45 @@ const Packages = () => {
                 onClose={() => setIsBarcodeModalOpen(false)}
                 pkg={barcodeTarget}
             />
+
+            <Modal open={isConsolidateModalOpen} onClose={() => setIsConsolidateModalOpen(false)}>
+                <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Bağlamaları Konsolidasiya Et</Text>
+                    <Text variant="body-2" color="secondary">
+                        Seçilmiş {selectedPackagesForConsolidation.length} bağlama tək bir bağlamaya birləşdiriləcək:
+                    </Text>
+                    <Card style={{ padding: '12px', backgroundColor: '#0d1117', maxHeight: '120px', overflowY: 'auto' }}>
+                        {selectedPackagesForConsolidation.map((p) => (
+                            <Text key={p.id} variant="body-2" style={{ display: 'block' }}>
+                                {p.trackingNumber} — {parseFloat(p.weight).toFixed(2)} kq (bəyan edilmiş)
+                            </Text>
+                        ))}
+                    </Card>
+
+                    {consolidateError && (
+                        <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
+                            {consolidateError}
+                        </div>
+                    )}
+
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Yeni Trek Nömrəsi *</Text>
+                        <TextInput placeholder="Məs: CONSOL-00123" value={consolidateTrackingNumber} onChange={(e) => setConsolidateTrackingNumber(e.target.value)} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Real Ölçülmüş Ümumi Çəki (kq) *</Text>
+                        <TextInput type="number" min="0" step="0.01" placeholder="Anbarda ölçülən son çəki" value={consolidateActualWeight} onChange={(e) => setConsolidateActualWeight(e.target.value)} />
+                        <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
+                            Bəyan edilmiş cəmi çəki: {totalDeclaredWeight.toFixed(2)} kq (istinad üçün — real çəki fərqli ola bilər)
+                        </Text>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                        <Button view="flat" onClick={() => setIsConsolidateModalOpen(false)}>Ləğv et</Button>
+                        <Button view="action" onClick={handleConsolidate} loading={consolidateSaving}>Konsolidasiya Et</Button>
+                    </div>
+                </div>
+            </Modal>
 
         </div>
     );

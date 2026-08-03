@@ -894,6 +894,120 @@ app.put('/api/packages/:id/assign-courier', verifyToken, requirePermission('pack
     }
 });
 
+// 1.2.1 Bağlamaların Konsolidasiyası (Bir neçə bağlamanı anbarda tək bağlamaya birləşdirmək)
+app.post('/api/packages/consolidate', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { packageIds, trackingNumber, actualWeight } = req.body;
+    const weight = parseFloat(actualWeight);
+
+    if (!Array.isArray(packageIds) || packageIds.length < 2) {
+        return res.status(400).json({ message: "Ən azı 2 bağlama seçilməlidir!" });
+    }
+    if (!trackingNumber || !trackingNumber.trim()) {
+        return res.status(400).json({ message: "Yeni trek nömrəsi qeyd edilməlidir!" });
+    }
+    if (isNaN(weight) || weight <= 0) {
+        return res.status(400).json({ message: "Real çəki müsbət rəqəm olmalıdır!" });
+    }
+
+    const idsList = packageIds.map((id) => parseInt(id)).filter((id) => !isNaN(id));
+    if (idsList.length !== packageIds.length || idsList.length < 2) {
+        return res.status(400).json({ message: "Yanlış bağlama ID-ləri" });
+    }
+
+    try {
+        const lookupRequest = pool.request();
+        const idParams = idsList.map((id, i) => {
+            lookupRequest.input(`id${i}`, sql.Int, id);
+            return `@id${i}`;
+        }).join(',');
+
+        const sourceResult = await lookupRequest.query(`
+            SELECT id, trackingNumber, weight, userId, warehouseId, status, isDeleted, consolidatedIntoId
+            FROM Packages WHERE id IN (${idParams})
+        `);
+
+        const sources = sourceResult.recordset;
+        if (sources.length !== idsList.length) {
+            return res.status(404).json({ message: "Seçilmiş bağlamalardan bəziləri tapılmadı" });
+        }
+
+        const firstUserId = sources[0].userId;
+        const firstWarehouseId = sources[0].warehouseId;
+
+        for (const pkg of sources) {
+            if (pkg.userId !== firstUserId) {
+                return res.status(400).json({ message: "Bütün bağlamalar eyni müştəriyə aid olmalıdır" });
+            }
+            if (pkg.warehouseId !== firstWarehouseId) {
+                return res.status(400).json({ message: "Bütün bağlamalar eyni anbarda olmalıdır" });
+            }
+            if (pkg.isDeleted) {
+                return res.status(400).json({ message: `${pkg.trackingNumber} artıq arxivlənib, konsolidasiya edilə bilməz` });
+            }
+            if (pkg.consolidatedIntoId) {
+                return res.status(400).json({ message: `${pkg.trackingNumber} artıq konsolidasiya edilib` });
+            }
+        }
+
+        const warehouseResult = await pool.request()
+            .input('warehouseId', sql.Int, firstWarehouseId)
+            .query('SELECT ratePerKg FROM Warehouses WHERE id = @warehouseId');
+        const ratePerKg = warehouseResult.recordset[0]?.ratePerKg || 0;
+        const price = Math.round(weight * ratePerKg * 100) / 100;
+
+        const insertResult = await pool.request()
+            .input('trackingNumber', sql.NVarChar, trackingNumber)
+            .input('weight', sql.Decimal(10, 2), weight)
+            .input('price', sql.Decimal(10, 2), price)
+            .input('status', sql.NVarChar, 'Bəyan edildi')
+            .input('userId', sql.Int, firstUserId)
+            .input('warehouseId', sql.Int, firstWarehouseId)
+            .query(`
+                INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId, warehouseId)
+                OUTPUT INSERTED.id
+                VALUES (@trackingNumber, @weight, @price, @status, 0, @userId, @warehouseId)
+            `);
+        const newPackageId = insertResult.recordset[0].id;
+
+        await pool.request()
+            .input('packageId', sql.Int, newPackageId)
+            .input('status', sql.NVarChar, 'Bəyan edildi')
+            .input('changedByUserId', sql.Int, req.user.id)
+            .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+
+        for (const pkg of sources) {
+            await pool.request()
+                .input('id', sql.Int, pkg.id)
+                .input('consolidatedIntoId', sql.Int, newPackageId)
+                .input('status', sql.NVarChar, 'Konsolidasiya edildi')
+                .query('UPDATE Packages SET status = @status, consolidatedIntoId = @consolidatedIntoId WHERE id = @id');
+
+            await pool.request()
+                .input('packageId', sql.Int, pkg.id)
+                .input('status', sql.NVarChar, 'Konsolidasiya edildi')
+                .input('changedByUserId', sql.Int, req.user.id)
+                .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+        }
+
+        await createInAppNotification(
+            firstUserId,
+            'Bağlamalarınız konsolidasiya edildi',
+            `${sources.map((s) => s.trackingNumber).join(', ')} bağlamaları "${trackingNumber}" trek nömrəli tək bağlamaya birləşdirildi.`,
+            'consolidation'
+        );
+
+        await logAudit(req, 'package.consolidate', 'Package', newPackageId, {
+            sourceTrackingNumbers: sources.map((s) => s.trackingNumber),
+            newTrackingNumber: trackingNumber,
+            actualWeight: weight
+        });
+
+        res.json({ message: "Bağlamalar uğurla konsolidasiya edildi", newPackageId });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // 1.3 Kuryerin Özünə Təyin Olunmuş Bağlamanın Statusunu Yeniləməsi
 app.put('/api/packages/:id/courier-status', verifyToken, requirePermission('packages.viewAssigned'), async (req, res) => {
     const { id } = req.params;
