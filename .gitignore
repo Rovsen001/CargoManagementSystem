@@ -10,6 +10,9 @@ node_modules/
 **/dist/
 dist/
 
+# Yüklənmiş fayllar (anbar qəbul şəkilləri və s.)
+Backend/uploads/
+
 # Log faylları
 *.log
 npm-debug.log*

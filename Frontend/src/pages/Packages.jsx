@@ -27,11 +27,14 @@ import {
     QrCode,
     ShieldCheck,
     FileText,
-    Layers
+    Layers,
+    WeightHanging
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
 import { generateCommercialInvoice } from '../utils/commercialInvoice';
+
+const API_ORIGIN = 'http://localhost:5000';
 
 const Packages = () => {
     // Daxil olan istifadəçini localStroage-dən götürürük
@@ -92,6 +95,13 @@ const Packages = () => {
     const [consolidateActualWeight, setConsolidateActualWeight] = useState('');
     const [consolidateSaving, setConsolidateSaving] = useState(false);
     const [consolidateError, setConsolidateError] = useState('');
+
+    const [isReceivingModalOpen, setIsReceivingModalOpen] = useState(false);
+    const [receivingTarget, setReceivingTarget] = useState(null);
+    const [receivingActualWeight, setReceivingActualWeight] = useState('');
+    const [receivingPhotoFile, setReceivingPhotoFile] = useState(null);
+    const [receivingSaving, setReceivingSaving] = useState(false);
+    const [receivingError, setReceivingError] = useState('');
 
     const openBarcodeModal = (item) => {
         setBarcodeTarget(item);
@@ -259,6 +269,38 @@ const Packages = () => {
             setConsolidateError(error.response?.data?.message || "Konsolidasiya edilərkən xəta baş verdi.");
         } finally {
             setConsolidateSaving(false);
+        }
+    };
+
+    const openReceivingModal = (item) => {
+        setReceivingTarget(item);
+        setReceivingActualWeight(item.weight || '');
+        setReceivingPhotoFile(null);
+        setReceivingError('');
+        setIsReceivingModalOpen(true);
+    };
+
+    const handleConfirmReceiving = async () => {
+        setReceivingError('');
+        const weightError = validateNonNegativeNumber(receivingActualWeight, "Real çəki");
+        if (weightError || parseFloat(receivingActualWeight) <= 0) {
+            setReceivingError('Real çəki müsbət rəqəm olmalıdır!');
+            return;
+        }
+        setReceivingSaving(true);
+        try {
+            const formData = new FormData();
+            formData.append('actualWeight', receivingActualWeight);
+            if (receivingPhotoFile) {
+                formData.append('photo', receivingPhotoFile);
+            }
+            await api.put(`/packages/${receivingTarget.id}/confirm-receiving`, formData);
+            setIsReceivingModalOpen(false);
+            fetchPackages();
+        } catch (error) {
+            setReceivingError(error.response?.data?.message || "Təsdiqlənərkən xəta baş verdi.");
+        } finally {
+            setReceivingSaving(false);
         }
     };
 
@@ -474,6 +516,22 @@ const Packages = () => {
                 ? <Label theme="success" icon={<Icon data={ShieldCheck} size={14} />}>${parseFloat(item.declaredValue).toFixed(2)}</Label>
                 : <Text color="secondary">—</Text>
         },
+        ...(canConsolidate ? [{
+            id: 'receiving',
+            name: 'Anbar Təsdiqi',
+            template: (item) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Label theme={item.weightConfirmed ? 'success' : 'normal'}>
+                        {item.weightConfirmed ? 'Təsdiqlənib' : 'Təsdiqlənməyib'}
+                    </Label>
+                    {item.receivingPhotoUrl && (
+                        <a href={`${API_ORIGIN}${item.receivingPhotoUrl}`} target="_blank" rel="noopener noreferrer">
+                            <img src={`${API_ORIGIN}${item.receivingPhotoUrl}`} alt="Qəbul şəkli" width={28} height={28} style={{ borderRadius: '4px', objectFit: 'cover', border: '1px solid #30363d' }} />
+                        </a>
+                    )}
+                </div>
+            )
+        }] : []),
         {
             id: 'status',
             name: 'Status',
@@ -554,6 +612,11 @@ const Packages = () => {
                             <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title="Kommersiya Fakturası (PDF)">
                                 <Icon data={FileText} />
                             </Button>
+                            {canConsolidate && (
+                                <Button view="flat-secondary" size="s" onClick={() => openReceivingModal(item)} title="Anbarda Çəkini Təsdiqlə">
+                                    <Icon data={WeightHanging} />
+                                </Button>
+                            )}
                             {canAssignCourier && (
                                 <Button view="flat-secondary" size="s" onClick={() => openAssignModal(item)} title="Kuryer Təyin Et">
                                     <Icon data={PersonWorker} />
@@ -961,6 +1024,36 @@ const Packages = () => {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                         <Button view="flat" onClick={() => setIsConsolidateModalOpen(false)}>Ləğv et</Button>
                         <Button view="action" onClick={handleConsolidate} loading={consolidateSaving}>Konsolidasiya Et</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={isReceivingModalOpen} onClose={() => setIsReceivingModalOpen(false)}>
+                <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Anbarda Çəkini Təsdiqlə</Text>
+                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{receivingTarget?.trackingNumber}</strong></Text>
+                    <Text variant="body-2" color="secondary">
+                        Müştərinin bəyan etdiyi çəki: <strong>{receivingTarget ? parseFloat(receivingTarget.weight).toFixed(2) : '0.00'} kq</strong>
+                    </Text>
+
+                    {receivingError && (
+                        <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
+                            {receivingError}
+                        </div>
+                    )}
+
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Anbarda Ölçülən Real Çəki (kq) *</Text>
+                        <TextInput type="number" min="0" step="0.01" value={receivingActualWeight} onChange={(e) => setReceivingActualWeight(e.target.value)} />
+                    </div>
+                    <div>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bağlamanın Şəkli (könüllü)</Text>
+                        <input type="file" accept="image/*" onChange={(e) => setReceivingPhotoFile(e.target.files[0] || null)} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                        <Button view="flat" onClick={() => setIsReceivingModalOpen(false)}>Ləğv et</Button>
+                        <Button view="action" onClick={handleConfirmReceiving} loading={receivingSaving}>Təsdiqlə</Button>
                     </div>
                 </div>
             </Modal>

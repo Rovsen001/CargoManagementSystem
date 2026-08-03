@@ -8,9 +8,30 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const speakeasy = require('speakeasy');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
+
+// Anbar qəbulu şəkillərinin yüklənməsi üçün (yerli fayl sistemi, xarici bulud xidməti tələb olunmur)
+const uploadsDir = path.join(__dirname, 'uploads', 'receiving');
+fs.mkdirSync(uploadsDir, { recursive: true });
+const receivingUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, uploadsDir),
+        filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`)
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Yalnız şəkil faylları qəbul edilir'));
+        }
+        cb(null, true);
+    }
+});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Stripe yalnız .env-də STRIPE_SECRET_KEY qeyd olunubsa aktivləşir (real satıcı açarları tələb olunur)
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -1003,6 +1024,75 @@ app.post('/api/packages/consolidate', verifyToken, requirePermission('packages.e
         });
 
         res.json({ message: "Bağlamalar uğurla konsolidasiya edildi", newPackageId });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 1.2.2 Anbarda Bağlamanın Real Çəkisini Təsdiqləmək (müştərinin bəyanını əvəz edir)
+app.put('/api/packages/:id/confirm-receiving', verifyToken, requirePermission('packages.editAll'), receivingUpload.single('photo'), async (req, res) => {
+    const { id } = req.params;
+    const actualWeight = parseFloat(req.body.actualWeight);
+
+    if (isNaN(actualWeight) || actualWeight <= 0) {
+        return res.status(400).json({ message: "Real çəki müsbət rəqəm olmalıdır!" });
+    }
+
+    try {
+        const existing = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT trackingNumber, weight, warehouseId, userId FROM Packages WHERE id = @id');
+
+        if (existing.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = existing.recordset[0];
+        const previousWeight = parseFloat(pkg.weight);
+
+        const warehouseResult = await pool.request()
+            .input('warehouseId', sql.Int, pkg.warehouseId)
+            .query('SELECT ratePerKg FROM Warehouses WHERE id = @warehouseId');
+        const ratePerKg = warehouseResult.recordset[0]?.ratePerKg || 0;
+        const newPrice = Math.round(actualWeight * ratePerKg * 100) / 100;
+
+        const photoUrl = req.file ? `/uploads/receiving/${req.file.filename}` : null;
+
+        const request = pool.request()
+            .input('id', sql.Int, id)
+            .input('weight', sql.Decimal(10, 2), actualWeight)
+            .input('price', sql.Decimal(10, 2), newPrice)
+            .input('confirmedBy', sql.Int, req.user.id);
+
+        let query = `
+            UPDATE Packages SET
+                weight = @weight,
+                price = @price,
+                weightConfirmed = 1,
+                weightConfirmedBy = @confirmedBy,
+                weightConfirmedAt = GETDATE()
+        `;
+        if (photoUrl) {
+            query += ', receivingPhotoUrl = @photoUrl';
+            request.input('photoUrl', sql.NVarChar, photoUrl);
+        }
+        query += ' WHERE id = @id';
+
+        await request.query(query);
+
+        if (Math.abs(previousWeight - actualWeight) > 0.01) {
+            await createInAppNotification(
+                pkg.userId,
+                'Bağlamanızın çəkisi anbarda təsdiqləndi',
+                `${pkg.trackingNumber}: bəyan etdiyiniz ${previousWeight.toFixed(2)} kq əvəzinə anbarda ölçülən real çəki ${actualWeight.toFixed(2)} kq təsdiqləndi. Yeni qiymət: $${newPrice.toFixed(2)}.`,
+                'weight_confirmed'
+            );
+        }
+
+        await logAudit(req, 'package.confirmReceiving', 'Package', id, {
+            trackingNumber: pkg.trackingNumber, previousWeight, actualWeight, newPrice, hasPhoto: Boolean(photoUrl)
+        });
+
+        res.json({ message: "Anbar qəbulu təsdiqləndi", weight: actualWeight, price: newPrice, photoUrl });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
