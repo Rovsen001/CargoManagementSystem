@@ -17,6 +17,8 @@ import Roles from './pages/Roles';
 import Warehouses from './pages/Warehouses';
 import AuditLog from './pages/AuditLog';
 import ProhibitedTerms from './pages/ProhibitedTerms';
+import StorageSettings from './pages/StorageSettings';
+import Claims from './pages/Claims';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
@@ -333,6 +335,13 @@ function App() {
                             >
                                 Dəstək
                             </Button>
+                            <Button
+                                view={activePage === 'claims' ? 'action' : 'flat-secondary'}
+                                width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                onClick={() => setActivePage('claims')}
+                            >
+                                Zədə/İtki İddiaları
+                            </Button>
                             {hasPermission('users.view') && (
                                 <Button
                                     view={activePage === 'customers' ? 'action' : 'flat-secondary'}
@@ -387,6 +396,15 @@ function App() {
                                     Qadağan Olunmuş Mallar
                                 </Button>
                             )}
+                            {isSuperAdminUser && (
+                                <Button
+                                    view={activePage === 'storage-settings' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('storage-settings')}
+                                >
+                                    Anbar Saxlama Tənzimləmələri
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
@@ -429,6 +447,7 @@ function App() {
                                 {activePage === 'packages' && <Packages />}
                                 {activePage === 'finance' && <FinancePage />}
                                 {activePage === 'support' && <Support />}
+                                {activePage === 'claims' && <Claims />}
                                 {activePage === 'warehouses' && <WarehouseAddressesModal user={user} />}
                                 {activePage === 'dashboard' && <Dashboard />}
                                 {activePage === 'customers' && (
@@ -458,6 +477,11 @@ function App() {
                                 )}
                                 {activePage === 'prohibited-terms' && (
                                     isSuperAdminUser ? <ProhibitedTerms /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'storage-settings' && (
+                                    isSuperAdminUser ? <StorageSettings /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}

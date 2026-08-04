@@ -28,7 +28,8 @@ import {
     ShieldCheck,
     FileText,
     Layers,
-    WeightHanging
+    WeightHanging,
+    Wallet
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
@@ -102,6 +103,13 @@ const Packages = () => {
     const [receivingPhotoFile, setReceivingPhotoFile] = useState(null);
     const [receivingSaving, setReceivingSaving] = useState(false);
     const [receivingError, setReceivingError] = useState('');
+
+    const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
+    const [storageTarget, setStorageTarget] = useState(null);
+    const [storageFeeData, setStorageFeeData] = useState(null);
+    const [storageLoading, setStorageLoading] = useState(false);
+    const [storagePaying, setStoragePaying] = useState(false);
+    const [storageError, setStorageError] = useState('');
 
     const openBarcodeModal = (item) => {
         setBarcodeTarget(item);
@@ -301,6 +309,37 @@ const Packages = () => {
             setReceivingError(error.response?.data?.message || "Təsdiqlənərkən xəta baş verdi.");
         } finally {
             setReceivingSaving(false);
+        }
+    };
+
+    const openStorageModal = async (item) => {
+        setStorageTarget(item);
+        setStorageFeeData(null);
+        setStorageError('');
+        setIsStorageModalOpen(true);
+        setStorageLoading(true);
+        try {
+            const response = await api.get(`/packages/${item.id}/storage-fee`);
+            setStorageFeeData(response.data);
+        } catch (error) {
+            setStorageError(error.response?.data?.message || "Anbar haqqı hesablanarkən xəta baş verdi.");
+        } finally {
+            setStorageLoading(false);
+        }
+    };
+
+    const handlePayStorageFee = async () => {
+        setStorageError('');
+        setStoragePaying(true);
+        try {
+            await api.post(`/packages/${storageTarget.id}/pay-storage-fee`);
+            const response = await api.get(`/packages/${storageTarget.id}/storage-fee`);
+            setStorageFeeData(response.data);
+            fetchPackages();
+        } catch (error) {
+            setStorageError(error.response?.data?.message || "Ödəniş zamanı xəta baş verdi.");
+        } finally {
+            setStoragePaying(false);
         }
     };
 
@@ -612,6 +651,11 @@ const Packages = () => {
                             <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title="Kommersiya Fakturası (PDF)">
                                 <Icon data={FileText} />
                             </Button>
+                            {item.arrivedAtBranchAt && (
+                                <Button view="flat-secondary" size="s" onClick={() => openStorageModal(item)} title="Anbar Saxlama Haqqı">
+                                    <Icon data={Wallet} />
+                                </Button>
+                            )}
                             {canConsolidate && (
                                 <Button view="flat-secondary" size="s" onClick={() => openReceivingModal(item)} title="Anbarda Çəkini Təsdiqlə">
                                     <Icon data={WeightHanging} />
@@ -1054,6 +1098,55 @@ const Packages = () => {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                         <Button view="flat" onClick={() => setIsReceivingModalOpen(false)}>Ləğv et</Button>
                         <Button view="action" onClick={handleConfirmReceiving} loading={receivingSaving}>Təsdiqlə</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={isStorageModalOpen} onClose={() => setIsStorageModalOpen(false)}>
+                <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Anbar Saxlama Haqqı</Text>
+                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{storageTarget?.trackingNumber}</strong></Text>
+
+                    {storageError && (
+                        <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
+                            {storageError}
+                        </div>
+                    )}
+
+                    {storageLoading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader size="m" /></div>
+                    ) : storageFeeData && (
+                        <>
+                            <Text variant="body-2" color="secondary">
+                                Anbara çatma tarixi: <strong>{new Date(storageFeeData.arrivedAtBranchAt).toLocaleDateString('az-AZ')}</strong>
+                            </Text>
+                            <Text variant="body-2" color="secondary">
+                                Pulsuz saxlama müddəti: <strong>{storageFeeData.freeDays} gün</strong> · Günlük tarif: <strong>${parseFloat(storageFeeData.dailyRate).toFixed(2)}</strong>
+                            </Text>
+                            <Text variant="body-2" color="secondary">
+                                Gecikmə: <strong>{storageFeeData.overdueDays} gün</strong> · Yaranmış haqq: <strong>${storageFeeData.totalAccrued.toFixed(2)}</strong>
+                            </Text>
+                            {storageFeeData.storageFeePaid > 0 && (
+                                <Text variant="body-2" color="secondary">
+                                    Ödənilmiş: <strong>${storageFeeData.storageFeePaid.toFixed(2)}</strong>
+                                </Text>
+                            )}
+                            <div style={{ padding: '12px 16px', borderRadius: '8px', backgroundColor: storageFeeData.outstanding > 0 ? '#3d1618' : '#13231b', border: `1px solid ${storageFeeData.outstanding > 0 ? '#f85149' : '#2ea043'}` }}>
+                                <Text variant="subheader-1" style={{ color: storageFeeData.outstanding > 0 ? '#ff7b72' : '#56d364' }}>
+                                    Ödəniləcək məbləğ: ${storageFeeData.outstanding.toFixed(2)}
+                                </Text>
+                            </div>
+
+                            {storageFeeData.outstanding > 0 && storageTarget?.userId === currentUser.id && (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
+                                    <Button view="action" onClick={handlePayStorageFee} loading={storagePaying}>Balansdan Ödə</Button>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                        <Button view="flat" onClick={() => setIsStorageModalOpen(false)}>Bağla</Button>
                     </div>
                 </div>
             </Modal>

@@ -33,6 +33,23 @@ const receivingUpload = multer({
 });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Zədə/itki iddiaları üçün sübut şəkillərinin yüklənməsi
+const claimsUploadsDir = path.join(__dirname, 'uploads', 'claims');
+fs.mkdirSync(claimsUploadsDir, { recursive: true });
+const claimUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, claimsUploadsDir),
+        filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`)
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Yalnız şəkil faylları qəbul edilir'));
+        }
+        cb(null, true);
+    }
+});
+
 // Stripe yalnız .env-də STRIPE_SECRET_KEY qeyd olunubsa aktivləşir (real satıcı açarları tələb olunur)
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
@@ -95,6 +112,20 @@ const loginLimiter = rateLimit({
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const INSURANCE_RATE = 0.02; // Bəyan edilmiş dəyərin 2%-i sığorta haqqı kimi tutulur
+
+function computeStorageFee(pkg, settings) {
+    if (!pkg.arrivedAtBranchAt) {
+        return { overdueDays: 0, totalAccrued: 0, outstanding: 0 };
+    }
+    const start = new Date(pkg.arrivedAtBranchAt);
+    const end = pkg.deliveredAt ? new Date(pkg.deliveredAt) : new Date();
+    const daysAtWarehouse = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+    const overdueDays = Math.max(0, daysAtWarehouse - settings.freeDays);
+    const totalAccrued = Math.round(overdueDays * settings.dailyRate * 100) / 100;
+    const storageFeePaid = parseFloat(pkg.storageFeePaid) || 0;
+    const outstanding = Math.max(0, Math.round((totalAccrued - storageFeePaid) * 100) / 100);
+    return { overdueDays, totalAccrued, outstanding };
+}
 const config = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -1127,7 +1158,12 @@ app.put('/api/packages/:id/courier-status', verifyToken, requirePermission('pack
         await pool.request()
             .input('id', sql.Int, id)
             .input('status', sql.NVarChar, status)
-            .query('UPDATE Packages SET status = @status WHERE id = @id');
+            .query(`
+                UPDATE Packages SET status = @status,
+                    arrivedAtBranchAt = CASE WHEN @status = N'Filialda' AND arrivedAtBranchAt IS NULL THEN GETDATE() ELSE arrivedAtBranchAt END,
+                    deliveredAt = CASE WHEN @status = N'Təhvil verildi' AND deliveredAt IS NULL THEN GETDATE() ELSE deliveredAt END
+                WHERE id = @id
+            `);
 
         if (status !== previousStatus) {
             await pool.request()
@@ -1295,7 +1331,10 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
             .input('itemDescription', sql.NVarChar, itemDescription)
             .input('countryOfOrigin', sql.NVarChar, countryOfOrigin);
 
-        let query = 'UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status, isInsured = @isInsured, declaredValue = @declaredValue, insuranceFee = @insuranceFee, hsCode = @hsCode, itemDescription = @itemDescription, countryOfOrigin = @countryOfOrigin WHERE id = @id';
+        let query = `UPDATE Packages SET trackingNumber = @trackingNumber, weight = @weight, price = @price, status = @status, isInsured = @isInsured, declaredValue = @declaredValue, insuranceFee = @insuranceFee, hsCode = @hsCode, itemDescription = @itemDescription, countryOfOrigin = @countryOfOrigin,
+            arrivedAtBranchAt = CASE WHEN @status = N'Filialda' AND arrivedAtBranchAt IS NULL THEN GETDATE() ELSE arrivedAtBranchAt END,
+            deliveredAt = CASE WHEN @status = N'Təhvil verildi' AND deliveredAt IS NULL THEN GETDATE() ELSE deliveredAt END
+            WHERE id = @id`;
         if (!canEditAll) {
             query += ' AND userId = @userId';
             request.input('userId', sql.Int, req.user.id);
@@ -2425,6 +2464,373 @@ app.put('/api/support/tickets/:id/status', verifyToken, requirePermission('suppo
         );
 
         res.json({ message: "Tiket statusu yeniləndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🛡️ ZƏDƏ/İTKİ İDDİALARI (CLAIMS)
+// ==========================================
+
+// 1. Yeni iddia yarat
+app.post('/api/claims', verifyToken, claimUpload.single('photo'), async (req, res) => {
+    const { packageId, type, description, requestedAmount } = req.body;
+    const allowedTypes = ['Zədə', 'İtki'];
+
+    if (!packageId || isNaN(parseInt(packageId))) {
+        return res.status(400).json({ message: "Bağlama seçilməlidir!" });
+    }
+    if (!type || !allowedTypes.includes(type)) {
+        return res.status(400).json({ message: "İddia növü düzgün seçilməlidir!" });
+    }
+    if (!description || !description.trim()) {
+        return res.status(400).json({ message: "Təsvir qeyd edilməlidir!" });
+    }
+
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
+
+        const pkgResult = await pool.request()
+            .input('id', sql.Int, packageId)
+            .query('SELECT id, userId, trackingNumber FROM Packages WHERE id = @id');
+
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+        if (!canEditAll && pkg.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlama üçün iddia təqdim etmək icazəniz yoxdur" });
+        }
+
+        const parsedAmount = parseFloat(requestedAmount);
+        const photoUrl = req.file ? `/uploads/claims/${req.file.filename}` : null;
+
+        const insertResult = await pool.request()
+            .input('packageId', sql.Int, packageId)
+            .input('userId', sql.Int, pkg.userId)
+            .input('type', sql.NVarChar, type)
+            .input('description', sql.NVarChar, description.trim())
+            .input('requestedAmount', sql.Decimal(10, 2), isNaN(parsedAmount) ? null : parsedAmount)
+            .input('photoUrl', sql.NVarChar, photoUrl)
+            .query(`
+                INSERT INTO Claims (packageId, userId, type, description, status, requestedAmount, photoUrl)
+                OUTPUT INSERTED.id
+                VALUES (@packageId, @userId, @type, @description, N'Açıq', @requestedAmount, @photoUrl)
+            `);
+
+        const claimId = insertResult.recordset[0].id;
+        await logAudit(req, 'claim.create', 'Claim', claimId, { packageId, trackingNumber: pkg.trackingNumber, type });
+
+        res.status(201).json({ message: "İddia təqdim edildi", claimId });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. İddiaların siyahısı (icazəyə görə hamısı və ya yalnız öz iddiaları)
+app.get('/api/claims', verifyToken, async (req, res) => {
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
+
+        let query = `
+            SELECT c.id, c.type, c.description, c.status, c.requestedAmount, c.resolvedAmount, c.photoUrl, c.createdAt, c.resolvedAt,
+                   p.trackingNumber, u.firstName, u.lastName, u.email
+            FROM Claims c
+            JOIN Packages p ON p.id = c.packageId
+            JOIN Users u ON u.id = c.userId
+        `;
+        const request = pool.request();
+        if (!canEditAll) {
+            query += ' WHERE c.userId = @userId';
+            request.input('userId', sql.Int, req.user.id);
+        }
+        query += ' ORDER BY c.createdAt DESC';
+
+        const result = await request.query(query);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. İddia detalı
+app.get('/api/claims/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
+
+        const result = await pool.request()
+            .input('id', sql.Int, id)
+            .query(`
+                SELECT c.*, p.trackingNumber, u.firstName, u.lastName, u.email
+                FROM Claims c
+                JOIN Packages p ON p.id = c.packageId
+                JOIN Users u ON u.id = c.userId
+                WHERE c.id = @id
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ message: "İddia tapılmadı" });
+        }
+        const claim = result.recordset[0];
+        if (!canEditAll && claim.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu iddiaya baxmaq icazəniz yoxdur" });
+        }
+
+        res.json(claim);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. İddianı Nəzərdən Keçir / Həll Et (yalnız icazəsi olan işçilər)
+app.put('/api/claims/:id/status', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    const { status, resolvedAmount, resolutionNote } = req.body;
+    const allowedStatuses = ['Baxılır', 'Təsdiqləndi', 'Rədd edildi'];
+
+    if (!status || !allowedStatuses.includes(status)) {
+        return res.status(400).json({ message: "Düzgün status seçin" });
+    }
+
+    const amount = parseFloat(resolvedAmount);
+    if (status === 'Təsdiqləndi' && (isNaN(amount) || amount <= 0)) {
+        return res.status(400).json({ message: "Təsdiqlənmiş məbləğ müsbət rəqəm olmalıdır!" });
+    }
+
+    try {
+        const claimResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query(`
+                SELECT c.userId, c.type, p.trackingNumber
+                FROM Claims c JOIN Packages p ON p.id = c.packageId
+                WHERE c.id = @id
+            `);
+
+        if (claimResult.recordset.length === 0) {
+            return res.status(404).json({ message: "İddia tapılmadı" });
+        }
+        const claim = claimResult.recordset[0];
+
+        const request = pool.request()
+            .input('id', sql.Int, id)
+            .input('status', sql.NVarChar, status)
+            .input('resolutionNote', sql.NVarChar, resolutionNote || null);
+
+        let query = 'UPDATE Claims SET status = @status, resolutionNote = @resolutionNote';
+        if (status !== 'Baxılır') {
+            query += ', resolvedAt = GETDATE(), resolvedBy = @resolvedBy';
+            request.input('resolvedBy', sql.Int, req.user.id);
+        }
+        if (status === 'Təsdiqləndi') {
+            query += ', resolvedAmount = @resolvedAmount';
+            request.input('resolvedAmount', sql.Decimal(10, 2), amount);
+        }
+        query += ' WHERE id = @id';
+
+        await request.query(query);
+
+        if (status === 'Təsdiqləndi') {
+            const transaction = new sql.Transaction(pool);
+            await transaction.begin();
+            try {
+                await new sql.Request(transaction)
+                    .input('amount', sql.Decimal(10, 2), amount)
+                    .input('userId', sql.Int, claim.userId)
+                    .query('UPDATE Users SET balance = ISNULL(balance, 0) + @amount WHERE id = @userId');
+
+                await new sql.Request(transaction)
+                    .input('userId', sql.Int, claim.userId)
+                    .input('amount', sql.Decimal(10, 2), amount)
+                    .input('type', sql.VarChar(10), 'inkam')
+                    .input('description', sql.NVarChar(255), `İddia kompensasiyası (${claim.trackingNumber})`)
+                    .query(`
+                        INSERT INTO transactions (user_id, amount, type, description)
+                        VALUES (@userId, @amount, @type, @description)
+                    `);
+
+                await transaction.commit();
+            } catch (txErr) {
+                await transaction.rollback();
+                throw txErr;
+            }
+        }
+
+        if (status !== 'Baxılır') {
+            await createInAppNotification(
+                claim.userId,
+                status === 'Təsdiqləndi' ? 'İddianız təsdiqləndi' : 'İddianız rədd edildi',
+                status === 'Təsdiqləndi'
+                    ? `${claim.trackingNumber} bağlaması üzrə iddianız təsdiqləndi. $${amount.toFixed(2)} balansınıza əlavə edildi.`
+                    : `${claim.trackingNumber} bağlaması üzrə iddianız rədd edildi.${resolutionNote ? ' Səbəb: ' + resolutionNote : ''}`,
+                'claim_resolved'
+            );
+        }
+
+        await logAudit(req, 'claim.resolve', 'Claim', id, { status, resolvedAmount: status === 'Təsdiqləndi' ? amount : null });
+
+        res.json({ message: "İddia yeniləndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 📦 ANBAR SAXLAMA HAQQI (STORAGE FEE)
+// ==========================================
+
+// 1. Tənzimləmələri gətir (istənilən daxil olmuş istifadəçi)
+app.get('/api/storage-settings', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request().query('SELECT TOP 1 id, freeDays, dailyRate FROM StorageSettings ORDER BY id DESC');
+        res.json(result.recordset[0] || { freeDays: 5, dailyRate: 1.00 });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Tənzimləmələri yenilə (yalnız Super Admin)
+app.put('/api/storage-settings', verifyToken, requireSuperAdmin, async (req, res) => {
+    const freeDays = parseInt(req.body.freeDays);
+    const dailyRate = parseFloat(req.body.dailyRate);
+
+    if (isNaN(freeDays) || freeDays < 0) {
+        return res.status(400).json({ message: "Pulsuz saxlama günləri düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    }
+    if (isNaN(dailyRate) || dailyRate < 0) {
+        return res.status(400).json({ message: "Günlük tarif düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    }
+
+    try {
+        const existing = await pool.request().query('SELECT TOP 1 id FROM StorageSettings ORDER BY id DESC');
+        if (existing.recordset.length === 0) {
+            await pool.request()
+                .input('freeDays', sql.Int, freeDays)
+                .input('dailyRate', sql.Decimal(10, 2), dailyRate)
+                .input('updatedBy', sql.Int, req.user.id)
+                .query('INSERT INTO StorageSettings (freeDays, dailyRate, updatedBy) VALUES (@freeDays, @dailyRate, @updatedBy)');
+        } else {
+            await pool.request()
+                .input('id', sql.Int, existing.recordset[0].id)
+                .input('freeDays', sql.Int, freeDays)
+                .input('dailyRate', sql.Decimal(10, 2), dailyRate)
+                .input('updatedBy', sql.Int, req.user.id)
+                .query('UPDATE StorageSettings SET freeDays = @freeDays, dailyRate = @dailyRate, updatedAt = GETDATE(), updatedBy = @updatedBy WHERE id = @id');
+        }
+
+        await logAudit(req, 'storageSettings.update', 'StorageSettings', null, { freeDays, dailyRate });
+        res.json({ message: "Anbar saxlama tənzimləmələri yeniləndi", freeDays, dailyRate });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Bağlamanın anbar saxlama haqqını hesabla
+app.get('/api/packages/:id/storage-fee', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pkgResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, trackingNumber, status, arrivedAtBranchAt, deliveredAt, storageFeePaid FROM Packages WHERE id = @id');
+
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('packages.editAll');
+        if (!canViewAll && pkg.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlamaya baxmaq icazəniz yoxdur" });
+        }
+
+        const settingsResult = await pool.request().query('SELECT TOP 1 freeDays, dailyRate FROM StorageSettings ORDER BY id DESC');
+        const settings = settingsResult.recordset[0] || { freeDays: 5, dailyRate: 1.00 };
+
+        const fee = computeStorageFee(pkg, settings);
+
+        res.json({
+            trackingNumber: pkg.trackingNumber,
+            status: pkg.status,
+            arrivedAtBranchAt: pkg.arrivedAtBranchAt,
+            deliveredAt: pkg.deliveredAt,
+            freeDays: settings.freeDays,
+            dailyRate: settings.dailyRate,
+            storageFeePaid: parseFloat(pkg.storageFeePaid) || 0,
+            ...fee
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Anbar saxlama haqqını balansdan ödə (yalnız bağlamanın sahibi)
+app.post('/api/packages/:id/pay-storage-fee', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pkgResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, trackingNumber, status, arrivedAtBranchAt, deliveredAt, storageFeePaid FROM Packages WHERE id = @id');
+
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+
+        if (pkg.userId !== req.user.id) {
+            return res.status(403).json({ message: "Yalnız bağlamanın sahibi anbar haqqını ödəyə bilər" });
+        }
+
+        const settingsResult = await pool.request().query('SELECT TOP 1 freeDays, dailyRate FROM StorageSettings ORDER BY id DESC');
+        const settings = settingsResult.recordset[0] || { freeDays: 5, dailyRate: 1.00 };
+        const { outstanding } = computeStorageFee(pkg, settings);
+
+        if (outstanding <= 0) {
+            return res.status(400).json({ message: "Ödəniləcək anbar haqqı yoxdur" });
+        }
+
+        const userResult = await pool.request().input('userId', sql.Int, req.user.id).query('SELECT balance FROM Users WHERE id = @userId');
+        const balance = parseFloat(userResult.recordset[0]?.balance) || 0;
+        if (balance < outstanding) {
+            return res.status(400).json({ message: `Balansınızda kifayət qədər vəsait yoxdur. Tələb olunur: $${outstanding.toFixed(2)}, mövcud balans: $${balance.toFixed(2)}` });
+        }
+
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        try {
+            await new sql.Request(transaction)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .input('userId', sql.Int, req.user.id)
+                .query('UPDATE Users SET balance = ISNULL(balance, 0) - @amount WHERE id = @userId');
+
+            await new sql.Request(transaction)
+                .input('id', sql.Int, id)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .query('UPDATE Packages SET storageFeePaid = storageFeePaid + @amount WHERE id = @id');
+
+            await new sql.Request(transaction)
+                .input('userId', sql.Int, req.user.id)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .input('type', sql.VarChar(10), 'xerc')
+                .input('description', sql.NVarChar(255), `Anbar saxlama haqqı (${pkg.trackingNumber})`)
+                .query(`
+                    INSERT INTO transactions (user_id, amount, type, description)
+                    VALUES (@userId, @amount, @type, @description)
+                `);
+
+            await transaction.commit();
+        } catch (txErr) {
+            await transaction.rollback();
+            throw txErr;
+        }
+
+        await logAudit(req, 'package.payStorageFee', 'Package', id, { trackingNumber: pkg.trackingNumber, amount: outstanding });
+
+        res.json({ message: "Anbar saxlama haqqı ödənildi", amountPaid: outstanding });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

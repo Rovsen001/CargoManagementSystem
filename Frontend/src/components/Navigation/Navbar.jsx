@@ -102,6 +102,13 @@ const Navbar = ({
                         >
                             {t('nav.support')}
                         </Button>
+                        <Button
+                            view={activePage === 'claims' ? 'action' : 'flat-secondary'}
+                            size="l"
+                            onClick={() => onNavigate('claims')}
+                        >
+                            {t('nav.claims')}
+                        </Button>
                     </>
                 )}
 
