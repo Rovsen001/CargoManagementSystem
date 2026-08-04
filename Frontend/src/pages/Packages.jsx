@@ -29,7 +29,8 @@ import {
     FileText,
     Layers,
     WeightHanging,
-    Wallet
+    Wallet,
+    Percent
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
@@ -110,6 +111,13 @@ const Packages = () => {
     const [storageLoading, setStorageLoading] = useState(false);
     const [storagePaying, setStoragePaying] = useState(false);
     const [storageError, setStorageError] = useState('');
+
+    const [isDutyModalOpen, setIsDutyModalOpen] = useState(false);
+    const [dutyTarget, setDutyTarget] = useState(null);
+    const [dutyData, setDutyData] = useState(null);
+    const [dutyLoading, setDutyLoading] = useState(false);
+    const [dutyPaying, setDutyPaying] = useState(false);
+    const [dutyError, setDutyError] = useState('');
 
     const openBarcodeModal = (item) => {
         setBarcodeTarget(item);
@@ -340,6 +348,37 @@ const Packages = () => {
             setStorageError(error.response?.data?.message || "Ödəniş zamanı xəta baş verdi.");
         } finally {
             setStoragePaying(false);
+        }
+    };
+
+    const openDutyModal = async (item) => {
+        setDutyTarget(item);
+        setDutyData(null);
+        setDutyError('');
+        setIsDutyModalOpen(true);
+        setDutyLoading(true);
+        try {
+            const response = await api.get(`/packages/${item.id}/customs-duty`);
+            setDutyData(response.data);
+        } catch (error) {
+            setDutyError(error.response?.data?.message || "Gömrük rüsumu hesablanarkən xəta baş verdi.");
+        } finally {
+            setDutyLoading(false);
+        }
+    };
+
+    const handlePayDuty = async () => {
+        setDutyError('');
+        setDutyPaying(true);
+        try {
+            await api.post(`/packages/${dutyTarget.id}/pay-customs-duty`);
+            const response = await api.get(`/packages/${dutyTarget.id}/customs-duty`);
+            setDutyData(response.data);
+            fetchPackages();
+        } catch (error) {
+            setDutyError(error.response?.data?.message || "Ödəniş zamanı xəta baş verdi.");
+        } finally {
+            setDutyPaying(false);
         }
     };
 
@@ -650,6 +689,9 @@ const Packages = () => {
                             </Button>
                             <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title="Kommersiya Fakturası (PDF)">
                                 <Icon data={FileText} />
+                            </Button>
+                            <Button view="flat-secondary" size="s" onClick={() => openDutyModal(item)} title="Gömrük Rüsumu">
+                                <Icon data={Percent} />
                             </Button>
                             {item.arrivedAtBranchAt && (
                                 <Button view="flat-secondary" size="s" onClick={() => openStorageModal(item)} title="Anbar Saxlama Haqqı">
@@ -1147,6 +1189,63 @@ const Packages = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
                         <Button view="flat" onClick={() => setIsStorageModalOpen(false)}>Bağla</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={isDutyModalOpen} onClose={() => setIsDutyModalOpen(false)}>
+                <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">Gömrük Rüsumu</Text>
+                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{dutyTarget?.trackingNumber}</strong></Text>
+
+                    {dutyError && (
+                        <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
+                            {dutyError}
+                        </div>
+                    )}
+
+                    {dutyLoading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader size="m" /></div>
+                    ) : dutyData && (
+                        <>
+                            <Text variant="body-2" color="secondary">
+                                Gömrük dəyəri: <strong>${dutyData.customsValue.toFixed(2)}</strong>
+                                {!dutyData.usedDeclaredValue && ' (hesablanmış qiymət əsasında)'}
+                            </Text>
+                            <Text variant="body-2" color="secondary">
+                                De minimis həddi: <strong>${dutyData.deMinimisThreshold.toFixed(2)}</strong>
+                            </Text>
+                            {dutyData.matchedCategory ? (
+                                <Text variant="body-2" color="secondary">
+                                    Kateqoriya: <strong>{dutyData.matchedCategory}</strong> · Rüsum faizi: <strong>{dutyData.dutyRatePercent.toFixed(2)}%</strong>
+                                </Text>
+                            ) : (
+                                <Text variant="body-2" color="secondary">Bağlama de minimis həddindən aşağı olduğu üçün rüsumdan azaddır.</Text>
+                            )}
+                            <Text variant="body-2" color="secondary">
+                                Hesablanmış rüsum: <strong>${dutyData.totalDuty.toFixed(2)}</strong>
+                            </Text>
+                            {dutyData.customsDutyPaid > 0 && (
+                                <Text variant="body-2" color="secondary">
+                                    Ödənilmiş: <strong>${dutyData.customsDutyPaid.toFixed(2)}</strong>
+                                </Text>
+                            )}
+                            <div style={{ padding: '12px 16px', borderRadius: '8px', backgroundColor: dutyData.outstanding > 0 ? '#3d1618' : '#13231b', border: `1px solid ${dutyData.outstanding > 0 ? '#f85149' : '#2ea043'}` }}>
+                                <Text variant="subheader-1" style={{ color: dutyData.outstanding > 0 ? '#ff7b72' : '#56d364' }}>
+                                    Ödəniləcək məbləğ: ${dutyData.outstanding.toFixed(2)}
+                                </Text>
+                            </div>
+
+                            {dutyData.outstanding > 0 && dutyTarget?.userId === currentUser.id && (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
+                                    <Button view="action" onClick={handlePayDuty} loading={dutyPaying}>Balansdan Ödə</Button>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                        <Button view="flat" onClick={() => setIsDutyModalOpen(false)}>Bağla</Button>
                     </div>
                 </div>
             </Modal>

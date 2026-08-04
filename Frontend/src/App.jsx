@@ -18,6 +18,7 @@ import Warehouses from './pages/Warehouses';
 import AuditLog from './pages/AuditLog';
 import ProhibitedTerms from './pages/ProhibitedTerms';
 import StorageSettings from './pages/StorageSettings';
+import CustomsDuty from './pages/CustomsDuty';
 import Claims from './pages/Claims';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
@@ -405,6 +406,15 @@ function App() {
                                     Anbar Saxlama Tənzimləmələri
                                 </Button>
                             )}
+                            {isSuperAdminUser && (
+                                <Button
+                                    view={activePage === 'customs-duty' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('customs-duty')}
+                                >
+                                    Gömrük Rüsumu
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
@@ -482,6 +492,11 @@ function App() {
                                 )}
                                 {activePage === 'storage-settings' && (
                                     isSuperAdminUser ? <StorageSettings /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'customs-duty' && (
+                                    isSuperAdminUser ? <CustomsDuty /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}

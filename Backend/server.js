@@ -126,6 +126,29 @@ function computeStorageFee(pkg, settings) {
     const outstanding = Math.max(0, Math.round((totalAccrued - storageFeePaid) * 100) / 100);
     return { overdueDays, totalAccrued, outstanding };
 }
+
+function computeCustomsDuty(pkg, rates, settings) {
+    const customsValue = pkg.declaredValue != null ? parseFloat(pkg.declaredValue) : (parseFloat(pkg.price) || 0);
+    const deMinimisThreshold = parseFloat(settings.deMinimisThreshold);
+
+    if (customsValue <= deMinimisThreshold) {
+        return { customsValue, dutyRatePercent: 0, matchedCategory: null, totalDuty: 0, outstanding: 0 };
+    }
+
+    const hsDigits = (pkg.hsCode || '').replace(/\D/g, '');
+    let matched = null;
+    if (hsDigits) {
+        const sortedRates = [...rates].sort((a, b) => b.hsCodePrefix.length - a.hsCodePrefix.length);
+        matched = sortedRates.find(r => hsDigits.startsWith(r.hsCodePrefix.replace(/\D/g, ''))) || null;
+    }
+
+    const dutyRatePercent = matched ? parseFloat(matched.dutyRatePercent) : parseFloat(settings.defaultDutyRatePercent);
+    const totalDuty = Math.round(customsValue * dutyRatePercent / 100 * 100) / 100;
+    const customsDutyPaid = parseFloat(pkg.customsDutyPaid) || 0;
+    const outstanding = Math.max(0, Math.round((totalDuty - customsDutyPaid) * 100) / 100);
+
+    return { customsValue, dutyRatePercent, matchedCategory: matched ? matched.category : 'Standart (defolt) tarif', totalDuty, outstanding };
+}
 const config = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -2831,6 +2854,218 @@ app.post('/api/packages/:id/pay-storage-fee', verifyToken, async (req, res) => {
         await logAudit(req, 'package.payStorageFee', 'Package', id, { trackingNumber: pkg.trackingNumber, amount: outstanding });
 
         res.json({ message: "Anbar saxlama haqqı ödənildi", amountPaid: outstanding });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🛃 GÖMRÜK RÜSUMU (CUSTOMS DUTY)
+// ==========================================
+
+// 1. Tarif cədvəli (istənilən daxil olmuş istifadəçi)
+app.get('/api/customs-duty-rates', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request().query('SELECT * FROM CustomsDutyRates ORDER BY hsCodePrefix ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Yeni tarif əlavə et (yalnız Super Admin)
+app.post('/api/customs-duty-rates', verifyToken, requireSuperAdmin, async (req, res) => {
+    const hsCodePrefix = (req.body.hsCodePrefix || '').replace(/\D/g, '');
+    const category = (req.body.category || '').trim();
+    const dutyRatePercent = parseFloat(req.body.dutyRatePercent);
+
+    if (!hsCodePrefix) {
+        return res.status(400).json({ message: "HS Kodu prefiksi rəqəmlərdən ibarət olmalıdır!" });
+    }
+    if (!category) {
+        return res.status(400).json({ message: "Kateqoriya adı mütləqdir!" });
+    }
+    if (isNaN(dutyRatePercent) || dutyRatePercent < 0) {
+        return res.status(400).json({ message: "Rüsum faizi düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    }
+
+    try {
+        await pool.request()
+            .input('hsCodePrefix', sql.NVarChar, hsCodePrefix)
+            .input('category', sql.NVarChar, category)
+            .input('dutyRatePercent', sql.Decimal(5, 2), dutyRatePercent)
+            .query('INSERT INTO CustomsDutyRates (hsCodePrefix, category, dutyRatePercent) VALUES (@hsCodePrefix, @category, @dutyRatePercent)');
+
+        await logAudit(req, 'customsDutyRate.create', 'CustomsDutyRate', null, { hsCodePrefix, category, dutyRatePercent });
+        res.json({ message: "Tarif əlavə edildi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Tarifi sil (yalnız Super Admin)
+app.delete('/api/customs-duty-rates/:id', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.request().input('id', sql.Int, id).query('DELETE FROM CustomsDutyRates WHERE id = @id');
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ message: "Tarif tapılmadı" });
+        }
+        await logAudit(req, 'customsDutyRate.delete', 'CustomsDutyRate', id, {});
+        res.json({ message: "Tarif silindi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Ümumi tənzimləmələr (de minimis həddi + defolt tarif)
+app.get('/api/customs-duty-settings', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request().query('SELECT TOP 1 id, deMinimisThreshold, defaultDutyRatePercent FROM CustomsDutySettings ORDER BY id DESC');
+        res.json(result.recordset[0] || { deMinimisThreshold: 300.00, defaultDutyRatePercent: 10.00 });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Ümumi tənzimləmələri yenilə (yalnız Super Admin)
+app.put('/api/customs-duty-settings', verifyToken, requireSuperAdmin, async (req, res) => {
+    const deMinimisThreshold = parseFloat(req.body.deMinimisThreshold);
+    const defaultDutyRatePercent = parseFloat(req.body.defaultDutyRatePercent);
+
+    if (isNaN(deMinimisThreshold) || deMinimisThreshold < 0) {
+        return res.status(400).json({ message: "De minimis həddi düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    }
+    if (isNaN(defaultDutyRatePercent) || defaultDutyRatePercent < 0) {
+        return res.status(400).json({ message: "Defolt rüsum faizi düzgün, mənfi olmayan bir rəqəm olmalıdır!" });
+    }
+
+    try {
+        const existing = await pool.request().query('SELECT TOP 1 id FROM CustomsDutySettings ORDER BY id DESC');
+        if (existing.recordset.length === 0) {
+            await pool.request()
+                .input('deMinimisThreshold', sql.Decimal(10, 2), deMinimisThreshold)
+                .input('defaultDutyRatePercent', sql.Decimal(5, 2), defaultDutyRatePercent)
+                .input('updatedBy', sql.Int, req.user.id)
+                .query('INSERT INTO CustomsDutySettings (deMinimisThreshold, defaultDutyRatePercent, updatedBy) VALUES (@deMinimisThreshold, @defaultDutyRatePercent, @updatedBy)');
+        } else {
+            await pool.request()
+                .input('id', sql.Int, existing.recordset[0].id)
+                .input('deMinimisThreshold', sql.Decimal(10, 2), deMinimisThreshold)
+                .input('defaultDutyRatePercent', sql.Decimal(5, 2), defaultDutyRatePercent)
+                .input('updatedBy', sql.Int, req.user.id)
+                .query('UPDATE CustomsDutySettings SET deMinimisThreshold = @deMinimisThreshold, defaultDutyRatePercent = @defaultDutyRatePercent, updatedAt = GETDATE(), updatedBy = @updatedBy WHERE id = @id');
+        }
+
+        await logAudit(req, 'customsDutySettings.update', 'CustomsDutySettings', null, { deMinimisThreshold, defaultDutyRatePercent });
+        res.json({ message: "Gömrük rüsumu tənzimləmələri yeniləndi", deMinimisThreshold, defaultDutyRatePercent });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 6. Bağlamanın gömrük rüsumunu hesabla
+app.get('/api/packages/:id/customs-duty', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pkgResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, trackingNumber, hsCode, itemDescription, price, declaredValue, customsDutyPaid FROM Packages WHERE id = @id');
+
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+
+        const { isSuperAdmin, permissions } = await getRoleInfo(req.user.role);
+        const canViewAll = isSuperAdmin || permissions.includes('packages.editAll');
+        if (!canViewAll && pkg.userId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlamaya baxmaq icazəniz yoxdur" });
+        }
+
+        const ratesResult = await pool.request().query('SELECT hsCodePrefix, category, dutyRatePercent FROM CustomsDutyRates');
+        const settingsResult = await pool.request().query('SELECT TOP 1 deMinimisThreshold, defaultDutyRatePercent FROM CustomsDutySettings ORDER BY id DESC');
+        const settings = settingsResult.recordset[0] || { deMinimisThreshold: 300.00, defaultDutyRatePercent: 10.00 };
+
+        const duty = computeCustomsDuty(pkg, ratesResult.recordset, settings);
+
+        res.json({
+            trackingNumber: pkg.trackingNumber,
+            hsCode: pkg.hsCode,
+            usedDeclaredValue: pkg.declaredValue != null,
+            deMinimisThreshold: parseFloat(settings.deMinimisThreshold),
+            customsDutyPaid: parseFloat(pkg.customsDutyPaid) || 0,
+            ...duty
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 7. Gömrük rüsumunu balansdan ödə (yalnız bağlamanın sahibi)
+app.post('/api/packages/:id/pay-customs-duty', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pkgResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT userId, trackingNumber, hsCode, price, declaredValue, customsDutyPaid FROM Packages WHERE id = @id');
+
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+
+        if (pkg.userId !== req.user.id) {
+            return res.status(403).json({ message: "Yalnız bağlamanın sahibi gömrük rüsumunu ödəyə bilər" });
+        }
+
+        const ratesResult = await pool.request().query('SELECT hsCodePrefix, category, dutyRatePercent FROM CustomsDutyRates');
+        const settingsResult = await pool.request().query('SELECT TOP 1 deMinimisThreshold, defaultDutyRatePercent FROM CustomsDutySettings ORDER BY id DESC');
+        const settings = settingsResult.recordset[0] || { deMinimisThreshold: 300.00, defaultDutyRatePercent: 10.00 };
+        const { outstanding } = computeCustomsDuty(pkg, ratesResult.recordset, settings);
+
+        if (outstanding <= 0) {
+            return res.status(400).json({ message: "Ödəniləcək gömrük rüsumu yoxdur" });
+        }
+
+        const userResult = await pool.request().input('userId', sql.Int, req.user.id).query('SELECT balance FROM Users WHERE id = @userId');
+        const balance = parseFloat(userResult.recordset[0]?.balance) || 0;
+        if (balance < outstanding) {
+            return res.status(400).json({ message: `Balansınızda kifayət qədər vəsait yoxdur. Tələb olunur: $${outstanding.toFixed(2)}, mövcud balans: $${balance.toFixed(2)}` });
+        }
+
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        try {
+            await new sql.Request(transaction)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .input('userId', sql.Int, req.user.id)
+                .query('UPDATE Users SET balance = ISNULL(balance, 0) - @amount WHERE id = @userId');
+
+            await new sql.Request(transaction)
+                .input('id', sql.Int, id)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .query('UPDATE Packages SET customsDutyPaid = customsDutyPaid + @amount WHERE id = @id');
+
+            await new sql.Request(transaction)
+                .input('userId', sql.Int, req.user.id)
+                .input('amount', sql.Decimal(10, 2), outstanding)
+                .input('type', sql.VarChar(10), 'xerc')
+                .input('description', sql.NVarChar(255), `Gömrük rüsumu (${pkg.trackingNumber})`)
+                .query(`
+                    INSERT INTO transactions (user_id, amount, type, description)
+                    VALUES (@userId, @amount, @type, @description)
+                `);
+
+            await transaction.commit();
+        } catch (txErr) {
+            await transaction.rollback();
+            throw txErr;
+        }
+
+        await logAudit(req, 'package.payCustomsDuty', 'Package', id, { trackingNumber: pkg.trackingNumber, amount: outstanding });
+
+        res.json({ message: "Gömrük rüsumu ödənildi", amountPaid: outstanding });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
