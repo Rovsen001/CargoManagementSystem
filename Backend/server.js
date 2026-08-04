@@ -1169,6 +1169,13 @@ app.post('/api/packages', verifyToken, async (req, res) => {
     }
 
     try {
+        const prohibitedMatch = await checkProhibitedContent(itemDescription);
+        if (prohibitedMatch) {
+            return res.status(400).json({
+                message: `Bu bağlama qadağan olunmuş məzmuna görə bəyan edilə bilməz: "${prohibitedMatch.term}" (${prohibitedMatch.category}). Zəhmət olmasa mal təsvirini yoxlayın.`
+            });
+        }
+
         const warehouseResult = await pool.request()
             .input('id', sql.Int, warehouseId)
             .query('SELECT ratePerKg FROM Warehouses WHERE id = @id AND isActive = 1');
@@ -1239,6 +1246,13 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
     const canEditAll = isSuperAdmin || permissions.includes('packages.editAll');
     const canOverridePrice = isSuperAdmin || permissions.includes('packages.changeStatus');
     try {
+        const prohibitedMatch = await checkProhibitedContent(itemDescription);
+        if (prohibitedMatch) {
+            return res.status(400).json({
+                message: `Bu bağlama qadağan olunmuş məzmuna görə yenilənə bilməz: "${prohibitedMatch.term}" (${prohibitedMatch.category}). Zəhmət olmasa mal təsvirini yoxlayın.`
+            });
+        }
+
         const existing = await pool.request()
             .input('id', sql.Int, id)
             .query('SELECT status, warehouseId, price as previousPrice, userId as ownerId FROM Packages WHERE id = @id');
@@ -1957,6 +1971,69 @@ app.delete('/api/roles/:id', verifyToken, requireSuperAdmin, async (req, res) =>
         await pool.request().input('id', sql.Int, id).query('DELETE FROM Roles WHERE id = @id');
         await logAudit(req, 'role.delete', 'Role', id, { name: role.name });
         res.json({ message: "Rol uğurla silindi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🚫 QADAĞAN OLUNMUŞ MALLAR (PROHIBITED GOODS SCREENING)
+// ==========================================
+
+// Mal təsvirini qadağan olunmuş açar sözlərlə yoxlayır. Uyğunluq taparsa {term, category} qaytarır, əks halda null.
+async function checkProhibitedContent(text) {
+    if (!text || !text.trim()) return null;
+    try {
+        const result = await pool.request().query('SELECT term, category FROM ProhibitedTerms');
+        const lowerText = text.toLowerCase();
+        const match = result.recordset.find((row) => lowerText.includes(row.term.toLowerCase()));
+        return match || null;
+    } catch (err) {
+        console.error('Qadağan olunmuş mallar yoxlanılarkən xəta:', err.message);
+        return null;
+    }
+}
+
+// 1. Siyahını gətir (Super Admin idarəetmə paneli üçün)
+app.get('/api/prohibited-terms', verifyToken, requireSuperAdmin, async (req, res) => {
+    try {
+        const result = await pool.request().query('SELECT id, term, category, createdAt FROM ProhibitedTerms ORDER BY category, term');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Yeni açar söz əlavə et
+app.post('/api/prohibited-terms', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { term, category } = req.body;
+    if (!term || !term.trim() || !category || !category.trim()) {
+        return res.status(400).json({ message: "Açar söz və kateqoriya qeyd edilməlidir!" });
+    }
+
+    try {
+        await pool.request()
+            .input('term', sql.NVarChar, term.trim())
+            .input('category', sql.NVarChar, category.trim())
+            .input('createdBy', sql.Int, req.user.id)
+            .query('INSERT INTO ProhibitedTerms (term, category, createdBy) VALUES (@term, @category, @createdBy)');
+
+        await logAudit(req, 'prohibitedTerm.create', 'ProhibitedTerm', null, { term: term.trim(), category: category.trim() });
+
+        res.status(201).json({ message: "Açar söz əlavə edildi!" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Açar sözü sil
+app.delete('/api/prohibited-terms/:id', verifyToken, requireSuperAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const existing = await pool.request().input('id', sql.Int, id).query('SELECT term FROM ProhibitedTerms WHERE id = @id');
+        await pool.request().input('id', sql.Int, id).query('DELETE FROM ProhibitedTerms WHERE id = @id');
+        await logAudit(req, 'prohibitedTerm.delete', 'ProhibitedTerm', id, { term: existing.recordset[0]?.term });
+        res.json({ message: "Açar söz silindi!" });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

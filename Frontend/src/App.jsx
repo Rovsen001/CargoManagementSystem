@@ -16,6 +16,7 @@ import Reports from './pages/Reports';
 import Roles from './pages/Roles';
 import Warehouses from './pages/Warehouses';
 import AuditLog from './pages/AuditLog';
+import ProhibitedTerms from './pages/ProhibitedTerms';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
 import Login from './pages/Login';
@@ -377,6 +378,15 @@ function App() {
                                     Audit Qeydləri
                                 </Button>
                             )}
+                            {isSuperAdminUser && (
+                                <Button
+                                    view={activePage === 'prohibited-terms' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('prohibited-terms')}
+                                >
+                                    Qadağan Olunmuş Mallar
+                                </Button>
+                            )}
 
                             <div style={{ marginTop: 'auto', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
                                 <Button
@@ -443,6 +453,11 @@ function App() {
                                 )}
                                 {activePage === 'audit-log' && (
                                     hasPermission('audit.view') ? <AuditLog /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'prohibited-terms' && (
+                                    isSuperAdminUser ? <ProhibitedTerms /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
