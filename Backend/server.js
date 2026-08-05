@@ -50,6 +50,23 @@ const claimUpload = multer({
     }
 });
 
+// Naməlum bağlamalar (Exception Resolver) üçün şəkillərin yüklənməsi
+const unidentifiedUploadsDir = path.join(__dirname, 'uploads', 'unidentified');
+fs.mkdirSync(unidentifiedUploadsDir, { recursive: true });
+const unidentifiedUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, unidentifiedUploadsDir),
+        filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`)
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Yalnız şəkil faylları qəbul edilir'));
+        }
+        cb(null, true);
+    }
+});
+
 // Stripe yalnız .env-də STRIPE_SECRET_KEY qeyd olunubsa aktivləşir (real satıcı açarları tələb olunur)
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
@@ -149,6 +166,49 @@ function computeCustomsDuty(pkg, rates, settings) {
 
     return { customsValue, dutyRatePercent, matchedCategory: matched ? matched.category : 'Standart (defolt) tarif', totalDuty, outstanding };
 }
+
+// Bağlamanın status state machine-i: hər status yalnız BİR növbəti statusa keçə bilər (ardıcıl, atlamasız)
+const PACKAGE_STATUS_TRANSITIONS = {
+    'Bəyan edildi': ['Yoldadır'],
+    'Yoldadır': ['Gömrükdə'],
+    'Gömrükdə': ['Filialda'],
+    'Filialda': ['Təhvil verildi'],
+    'Təhvil verildi': [],
+    'Konsolidasiya edildi': []
+};
+
+// Həcmi çəki = (Uzunluq × En × Hündürlük) / 6000 (sənayedə standart avia-yük əmsalı, sm-lə ölçü)
+function computeVolumetricWeight(length, width, height) {
+    const l = parseFloat(length) || 0;
+    const w = parseFloat(width) || 0;
+    const h = parseFloat(height) || 0;
+    if (l <= 0 || w <= 0 || h <= 0) return null;
+    return Math.round((l * w * h / 6000) * 100) / 100;
+}
+
+function validateStatusTransition(currentStatus, newStatus, { isSuperAdmin, weightConfirmed }) {
+    if (currentStatus === newStatus) return { valid: true };
+    if (isSuperAdmin) return { valid: true };
+
+    const allowedNext = PACKAGE_STATUS_TRANSITIONS[currentStatus] || [];
+    if (!allowedNext.includes(newStatus)) {
+        const nextLabel = allowedNext.length > 0 ? allowedNext.join(', ') : 'yoxdur (bu son mərhələdir)';
+        return {
+            valid: false,
+            message: `Status ardıcıllığı pozulur: "${currentStatus}" statusundan yalnız bu statusa keçid mümkündür: ${nextLabel}`
+        };
+    }
+
+    if (currentStatus === 'Bəyan edildi' && newStatus === 'Yoldadır' && !weightConfirmed) {
+        return {
+            valid: false,
+            message: `"Yoldadır" statusuna keçməzdən əvvəl bağlamanın anbarda çəkisi təsdiqlənməlidir.`
+        };
+    }
+
+    return { valid: true };
+}
+
 const config = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -1087,6 +1147,10 @@ app.post('/api/packages/consolidate', verifyToken, requirePermission('packages.e
 app.put('/api/packages/:id/confirm-receiving', verifyToken, requirePermission('packages.editAll'), receivingUpload.single('photo'), async (req, res) => {
     const { id } = req.params;
     const actualWeight = parseFloat(req.body.actualWeight);
+    const length = req.body.length !== undefined && req.body.length !== '' ? parseFloat(req.body.length) : null;
+    const width = req.body.width !== undefined && req.body.width !== '' ? parseFloat(req.body.width) : null;
+    const height = req.body.height !== undefined && req.body.height !== '' ? parseFloat(req.body.height) : null;
+    const volumetricWeight = computeVolumetricWeight(length, width, height);
 
     if (isNaN(actualWeight) || actualWeight <= 0) {
         return res.status(400).json({ message: "Real çəki müsbət rəqəm olmalıdır!" });
@@ -1115,7 +1179,11 @@ app.put('/api/packages/:id/confirm-receiving', verifyToken, requirePermission('p
             .input('id', sql.Int, id)
             .input('weight', sql.Decimal(10, 2), actualWeight)
             .input('price', sql.Decimal(10, 2), newPrice)
-            .input('confirmedBy', sql.Int, req.user.id);
+            .input('confirmedBy', sql.Int, req.user.id)
+            .input('length', sql.Decimal(10, 2), length)
+            .input('width', sql.Decimal(10, 2), width)
+            .input('height', sql.Decimal(10, 2), height)
+            .input('volumetricWeight', sql.Decimal(10, 2), volumetricWeight);
 
         let query = `
             UPDATE Packages SET
@@ -1123,7 +1191,11 @@ app.put('/api/packages/:id/confirm-receiving', verifyToken, requirePermission('p
                 price = @price,
                 weightConfirmed = 1,
                 weightConfirmedBy = @confirmedBy,
-                weightConfirmedAt = GETDATE()
+                weightConfirmedAt = GETDATE(),
+                [length] = @length,
+                width = @width,
+                height = @height,
+                volumetricWeight = @volumetricWeight
         `;
         if (photoUrl) {
             query += ', receivingPhotoUrl = @photoUrl';
@@ -1165,7 +1237,7 @@ app.put('/api/packages/:id/courier-status', verifyToken, requirePermission('pack
     try {
         const existing = await pool.request()
             .input('id', sql.Int, id)
-            .query('SELECT status, assignedCourierId, userId, trackingNumber FROM Packages WHERE id = @id');
+            .query('SELECT status, assignedCourierId, userId, trackingNumber, weightConfirmed FROM Packages WHERE id = @id');
 
         if (existing.recordset.length === 0) {
             return res.status(404).json({ message: "Bağlama tapılmadı" });
@@ -1177,6 +1249,15 @@ app.put('/api/packages/:id/courier-status', verifyToken, requirePermission('pack
         const previousStatus = existing.recordset[0].status;
         const ownerId = existing.recordset[0].userId;
         const trackingNumber = existing.recordset[0].trackingNumber;
+
+        const { isSuperAdmin: isCourierSuperAdmin } = await getRoleInfo(req.user.role);
+        const transitionCheck = validateStatusTransition(previousStatus, status, {
+            isSuperAdmin: isCourierSuperAdmin,
+            weightConfirmed: existing.recordset[0].weightConfirmed
+        });
+        if (!transitionCheck.valid) {
+            return res.status(400).json({ message: transitionCheck.message });
+        }
 
         await pool.request()
             .input('id', sql.Int, id)
@@ -1314,7 +1395,7 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
 
         const existing = await pool.request()
             .input('id', sql.Int, id)
-            .query('SELECT status, warehouseId, price as previousPrice, userId as ownerId FROM Packages WHERE id = @id');
+            .query('SELECT status, warehouseId, price as previousPrice, userId as ownerId, weightConfirmed FROM Packages WHERE id = @id');
         if (existing.recordset.length === 0) {
             return res.status(404).json({ message: "Bağlama tapılmadı" });
         }
@@ -1322,6 +1403,14 @@ app.put('/api/packages/:id', verifyToken, async (req, res) => {
         const warehouseId = existing.recordset[0].warehouseId;
         const previousPrice = existing.recordset[0].previousPrice;
         const ownerId = existing.recordset[0].ownerId;
+
+        const transitionCheck = validateStatusTransition(previousStatus, status, {
+            isSuperAdmin,
+            weightConfirmed: existing.recordset[0].weightConfirmed
+        });
+        if (!transitionCheck.valid) {
+            return res.status(400).json({ message: transitionCheck.message });
+        }
 
         // Qiymət: Admin-səviyyəli istifadəçi əl ilə göndərsə istifadə olunur, əks halda çəki × anbar tarifinə görə yenidən hesablanır
         let price;
@@ -3066,6 +3155,226 @@ app.post('/api/packages/:id/pay-customs-duty', verifyToken, async (req, res) => 
         await logAudit(req, 'package.payCustomsDuty', 'Package', id, { trackingNumber: pkg.trackingNumber, amount: outstanding });
 
         res.json({ message: "Gömrük rüsumu ödənildi", amountPaid: outstanding });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 📡 XARİCİ ANBAR OPERATORU (SCANNER + EXCEPTION RESOLVER)
+// ==========================================
+
+// 1. Trek nömrəsi ilə sürətli axtarış (skaner-optimized)
+app.get('/api/packages/lookup', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const query = (req.query.trackingNumber || '').trim();
+    if (!query) {
+        return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir" });
+    }
+    try {
+        const exact = await pool.request()
+            .input('trackingNumber', sql.NVarChar, query)
+            .query(`
+                SELECT p.*, u.firstName as ownerFirstName, u.lastName as ownerLastName, u.email as ownerEmail, w.name as warehouseName
+                FROM Packages p
+                LEFT JOIN Users u ON u.id = p.userId
+                LEFT JOIN Warehouses w ON w.id = p.warehouseId
+                WHERE p.trackingNumber = @trackingNumber AND p.isDeleted = 0
+            `);
+        if (exact.recordset.length > 0) {
+            return res.json({ found: true, exact: true, package: exact.recordset[0] });
+        }
+
+        const partial = await pool.request()
+            .input('trackingNumber', sql.NVarChar, `%${query}%`)
+            .query(`
+                SELECT TOP 10 p.*, u.firstName as ownerFirstName, u.lastName as ownerLastName, u.email as ownerEmail, w.name as warehouseName
+                FROM Packages p
+                LEFT JOIN Users u ON u.id = p.userId
+                LEFT JOIN Warehouses w ON w.id = p.warehouseId
+                WHERE p.trackingNumber LIKE @trackingNumber AND p.isDeleted = 0
+                ORDER BY p.id DESC
+            `);
+        if (partial.recordset.length > 0) {
+            return res.json({ found: true, exact: false, matches: partial.recordset });
+        }
+
+        res.json({ found: false });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Naməlum bağlama qeydə al
+app.post('/api/unidentified-parcels', verifyToken, requirePermission('packages.editAll'), unidentifiedUpload.single('photo'), async (req, res) => {
+    const trackingNumber = (req.body.trackingNumber || '').trim();
+    const warehouseId = req.body.warehouseId ? parseInt(req.body.warehouseId) : null;
+    const weight = req.body.weight ? parseFloat(req.body.weight) : null;
+    const length = req.body.length ? parseFloat(req.body.length) : null;
+    const width = req.body.width ? parseFloat(req.body.width) : null;
+    const height = req.body.height ? parseFloat(req.body.height) : null;
+    const notes = (req.body.notes || '').trim() || null;
+    const volumetricWeight = computeVolumetricWeight(length, width, height);
+
+    if (!trackingNumber) {
+        return res.status(400).json({ message: "Trek nömrəsi qeyd edilməlidir" });
+    }
+
+    try {
+        const photoUrl = req.file ? `/uploads/unidentified/${req.file.filename}` : null;
+
+        const result = await pool.request()
+            .input('trackingNumber', sql.NVarChar, trackingNumber)
+            .input('warehouseId', sql.Int, warehouseId)
+            .input('weight', sql.Decimal(10, 2), weight)
+            .input('length', sql.Decimal(10, 2), length)
+            .input('width', sql.Decimal(10, 2), width)
+            .input('height', sql.Decimal(10, 2), height)
+            .input('volumetricWeight', sql.Decimal(10, 2), volumetricWeight)
+            .input('photoUrl', sql.NVarChar, photoUrl)
+            .input('notes', sql.NVarChar, notes)
+            .input('scannedBy', sql.Int, req.user.id)
+            .query(`
+                INSERT INTO UnidentifiedParcels (trackingNumber, warehouseId, weight, [length], width, height, volumetricWeight, photoUrl, notes, scannedBy)
+                OUTPUT INSERTED.id
+                VALUES (@trackingNumber, @warehouseId, @weight, @length, @width, @height, @volumetricWeight, @photoUrl, @notes, @scannedBy)
+            `);
+
+        await logAudit(req, 'unidentifiedParcel.create', 'UnidentifiedParcel', result.recordset[0].id, { trackingNumber });
+        res.json({ message: "Naməlum bağlama qeydə alındı", id: result.recordset[0].id });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Naməlum bağlamaların siyahısı
+app.get('/api/unidentified-parcels', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    try {
+        const statusFilter = (req.query.status || 'Açıq').trim();
+        const request = pool.request();
+        let whereClause = '';
+        if (statusFilter !== 'ALL') {
+            whereClause = 'WHERE up.status = @status';
+            request.input('status', sql.NVarChar, statusFilter);
+        }
+        const result = await request.query(`
+            SELECT up.*, w.name as warehouseName, su.firstName as scannedByFirstName, su.lastName as scannedByLastName
+            FROM UnidentifiedParcels up
+            LEFT JOIN Warehouses w ON w.id = up.warehouseId
+            LEFT JOIN Users su ON su.id = up.scannedBy
+            ${whereClause}
+            ORDER BY up.id DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Müştəri axtarışı (Exception Resolver-də təyinat üçün)
+app.get('/api/customers/search', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const q = (req.query.q || '').trim();
+    if (!q) {
+        return res.json([]);
+    }
+    try {
+        const request = pool.request().input('search', sql.NVarChar, `%${q}%`);
+        let whereExtra = '';
+        const codeMatch = q.match(/^#?C-?(\d+)$/i);
+        if (codeMatch) {
+            const impliedId = parseInt(codeMatch[1]) - 10400;
+            request.input('impliedId', sql.Int, impliedId);
+            whereExtra = ' OR id = @impliedId';
+        }
+        const result = await request.query(`
+            SELECT TOP 10 id, firstName, lastName, email
+            FROM Users
+            WHERE role = N'Customer' AND (firstName LIKE @search OR lastName LIKE @search OR email LIKE @search${whereExtra})
+            ORDER BY id DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Naməlum bağlamanı müştəriyə təyin et (real Bağlama qeydi yaradılır)
+app.post('/api/unidentified-parcels/:id/assign', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    const userId = parseInt(req.body.userId);
+    const warehouseId = req.body.warehouseId ? parseInt(req.body.warehouseId) : null;
+
+    if (isNaN(userId)) {
+        return res.status(400).json({ message: "Müştəri seçilməlidir" });
+    }
+
+    try {
+        const parcelResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query(`SELECT * FROM UnidentifiedParcels WHERE id = @id`);
+        if (parcelResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Naməlum bağlama tapılmadı" });
+        }
+        const parcel = parcelResult.recordset[0];
+        if (parcel.status !== 'Açıq') {
+            return res.status(400).json({ message: "Bu bağlama artıq həll edilib" });
+        }
+
+        const finalWarehouseId = warehouseId || parcel.warehouseId;
+        if (!finalWarehouseId) {
+            return res.status(400).json({ message: "Anbar seçilməlidir" });
+        }
+        const warehouseResult = await pool.request()
+            .input('warehouseId', sql.Int, finalWarehouseId)
+            .query('SELECT ratePerKg FROM Warehouses WHERE id = @warehouseId AND isActive = 1');
+        if (warehouseResult.recordset.length === 0) {
+            return res.status(400).json({ message: "Seçilmiş anbar tapılmadı və ya aktiv deyil" });
+        }
+        const ratePerKg = warehouseResult.recordset[0].ratePerKg;
+        const weight = parseFloat(parcel.weight) || 0;
+        const price = Math.round(weight * ratePerKg * 100) / 100;
+
+        const insertResult = await pool.request()
+            .input('trackingNumber', sql.NVarChar, parcel.trackingNumber)
+            .input('weight', sql.Decimal(10, 2), weight)
+            .input('price', sql.Decimal(10, 2), price)
+            .input('status', sql.NVarChar, 'Bəyan edildi')
+            .input('userId', sql.Int, userId)
+            .input('warehouseId', sql.Int, finalWarehouseId)
+            .input('length', sql.Decimal(10, 2), parcel.length)
+            .input('width', sql.Decimal(10, 2), parcel.width)
+            .input('height', sql.Decimal(10, 2), parcel.height)
+            .input('volumetricWeight', sql.Decimal(10, 2), parcel.volumetricWeight)
+            .input('receivingPhotoUrl', sql.NVarChar, parcel.photoUrl)
+            .input('confirmedBy', sql.Int, req.user.id)
+            .query(`
+                INSERT INTO Packages (trackingNumber, weight, price, status, isDeleted, userId, warehouseId, [length], width, height, volumetricWeight, weightConfirmed, weightConfirmedBy, weightConfirmedAt, receivingPhotoUrl)
+                OUTPUT INSERTED.id
+                VALUES (@trackingNumber, @weight, @price, @status, 0, @userId, @warehouseId, @length, @width, @height, @volumetricWeight, 1, @confirmedBy, GETDATE(), @receivingPhotoUrl)
+            `);
+        const newPackageId = insertResult.recordset[0].id;
+
+        await pool.request()
+            .input('packageId', sql.Int, newPackageId)
+            .input('status', sql.NVarChar, 'Bəyan edildi')
+            .input('changedByUserId', sql.Int, req.user.id)
+            .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('resolvedPackageId', sql.Int, newPackageId)
+            .input('resolvedBy', sql.Int, req.user.id)
+            .query(`UPDATE UnidentifiedParcels SET status = N'Həll edildi', resolvedPackageId = @resolvedPackageId, resolvedBy = @resolvedBy, resolvedAt = GETDATE() WHERE id = @id`);
+
+        await createInAppNotification(
+            userId,
+            'Sizə aid naməlum bağlama tapıldı',
+            `Xarici anbarda sahibsiz aşkarlanan "${parcel.trackingNumber}" bağlaması hesabınıza əlavə edildi.`,
+            'general'
+        );
+
+        await logAudit(req, 'unidentifiedParcel.assign', 'UnidentifiedParcel', id, { trackingNumber: parcel.trackingNumber, userId, newPackageId });
+
+        res.json({ message: "Bağlama müştəriyə təyin edildi", packageId: newPackageId });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

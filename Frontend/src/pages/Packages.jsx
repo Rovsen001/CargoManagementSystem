@@ -31,7 +31,8 @@ import {
     Layers,
     WeightHanging,
     Wallet,
-    Percent
+    Percent,
+    ArrowRight
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
@@ -89,7 +90,7 @@ const Packages = () => {
     };
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [editFormData, setEditFormData] = useState({ id: null, trackingNumber: '', weight: '', price: '', status: '', warehouseId: '', isInsured: false, declaredValue: '', hsCode: '', itemDescription: '', countryOfOrigin: '' });
+    const [editFormData, setEditFormData] = useState({ id: null, trackingNumber: '', weight: '', price: '', status: '', warehouseId: '', isInsured: false, declaredValue: '', hsCode: '', itemDescription: '', countryOfOrigin: '', weightConfirmed: false });
 
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [historyData, setHistoryData] = useState([]);
@@ -460,6 +461,7 @@ const Packages = () => {
             fetchPackages();
         } catch (error) {
             console.error("Yenilənərkən xəta:", error);
+            alert(error.response?.data?.message || t('packages.statusUpdateError'));
         }
     };
 
@@ -475,7 +477,8 @@ const Packages = () => {
             declaredValue: item.declaredValue || '',
             hsCode: item.hsCode || '',
             itemDescription: item.itemDescription || '',
-            countryOfOrigin: item.countryOfOrigin || ''
+            countryOfOrigin: item.countryOfOrigin || '',
+            weightConfirmed: Boolean(item.weightConfirmed)
         });
         setIsEditModalOpen(true);
     };
@@ -517,6 +520,7 @@ const Packages = () => {
             fetchPackages();
         } catch (error) {
             console.error("Status yenilənərkən xəta:", error);
+            alert(error.response?.data?.message || t('packages.statusUpdateError'));
         }
     };
 
@@ -571,6 +575,56 @@ const Packages = () => {
     const renderStatusBadge = (status) => {
         const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success', 'Təhvil verildi': 'success', 'Konsolidasiya edildi': 'utility' };
         return <Label theme={themeMap[status] || 'normal'}>{statusLabel(status)}</Label>;
+    };
+
+    // Bağlamanın status state machine-i: hər status yalnız BİR növbəti statusa keçə bilər (backend ilə eyni ardıcıllıq)
+    const PIPELINE_STEPS = ['Bəyan edildi', 'Yoldadır', 'Gömrükdə', 'Filialda', 'Təhvil verildi'];
+    const NEXT_STATUS = {
+        'Bəyan edildi': 'Yoldadır',
+        'Yoldadır': 'Gömrükdə',
+        'Gömrükdə': 'Filialda',
+        'Filialda': 'Təhvil verildi'
+    };
+
+    const StatusPipeline = ({ status }) => {
+        const currentIndex = PIPELINE_STEPS.indexOf(status);
+        if (currentIndex === -1) return null;
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+                {PIPELINE_STEPS.map((step, idx) => (
+                    <React.Fragment key={step}>
+                        <div
+                            title={statusLabel(step)}
+                            style={{
+                                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                                backgroundColor: idx <= currentIndex ? '#a78bfa' : '#30363d'
+                            }}
+                        />
+                        {idx < PIPELINE_STEPS.length - 1 && (
+                            <div style={{ width: '10px', height: '2px', backgroundColor: idx < currentIndex ? '#a78bfa' : '#30363d' }} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+        );
+    };
+
+    const renderAdvanceButton = (item, { allowFinalStep }) => {
+        const nextStatus = NEXT_STATUS[item.status];
+        if (!nextStatus) return null;
+        if (!allowFinalStep && item.status === 'Filialda') return null;
+        const gated = item.status === 'Bəyan edildi' && !item.weightConfirmed;
+        return (
+            <Button
+                view="outlined"
+                size="s"
+                disabled={gated}
+                onClick={() => (allowFinalStep ? handleCourierStatusUpdate(item.id, nextStatus) : handleStatusChange(item.id, nextStatus, item))}
+                title={gated ? t('packages.weightNotConfirmedGate') : t('packages.advanceButtonLabel', { status: statusLabel(nextStatus) })}
+            >
+                <Icon data={ArrowRight} /> {statusLabel(nextStatus)}
+            </Button>
+        );
     };
 
     const consolidationTargetTrackingNumber = (consolidatedIntoId) => {
@@ -635,6 +689,7 @@ const Packages = () => {
                             → {consolidationTargetTrackingNumber(item.consolidatedIntoId)}
                         </Text>
                     )}
+                    <StatusPipeline status={item.status} />
                 </div>
             )
         },
@@ -658,17 +713,7 @@ const Packages = () => {
                     {activeTab === 'active' ? (
                         isCourierUser ? (
                             <>
-                                <Select
-                                    value={[item.status || 'Yoldadır']}
-                                    onUpdate={(val) => handleCourierStatusUpdate(item.id, val[0])}
-                                    options={[
-                                        { value: 'Yoldadır', content: t('packages.statusInTransit') },
-                                        { value: 'Gömrükdə', content: t('packages.statusCustoms') },
-                                        { value: 'Filialda', content: t('packages.statusAtBranch') },
-                                        { value: 'Təhvil verildi', content: t('packages.statusDelivered') }
-                                    ]}
-                                    size="s"
-                                />
+                                {renderAdvanceButton(item, { allowFinalStep: true })}
                                 <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title={t('packages.historyButton')}>
                                     <Icon data={Clock} />
                                 </Button>
@@ -678,20 +723,8 @@ const Packages = () => {
                             </>
                         ) : (
                         <>
-                            {/* STATUS SELECT - Yalnız icazəsi olanlar üçün */}
-                            {canChangeStatus && (
-                                <Select
-                                    value={[item.status || 'Bəyan edildi']}
-                                    onUpdate={(val) => handleStatusChange(item.id, val[0], item)}
-                                    options={[
-                                        { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
-                                        { value: 'Yoldadır', content: t('packages.statusInTransit') },
-                                        { value: 'Gömrükdə', content: t('packages.statusCustoms') },
-                                        { value: 'Filialda', content: t('packages.statusAtBranch') }
-                                    ]}
-                                    size="s"
-                                />
-                            )}
+                            {/* NÖVBƏTİ MƏRHƏLƏYƏ KEÇ - Yalnız icazəsi olanlar üçün, yalnız tək addım irəli */}
+                            {canChangeStatus && renderAdvanceButton(item, { allowFinalStep: false })}
                             <Button view="flat-secondary" size="s" onClick={() => openEditModal(item)} title={t('packages.editButton')}>
                                 <Icon data={Pencil} />
                             </Button>
@@ -970,14 +1003,29 @@ const Packages = () => {
                             <Select
                                 value={[editFormData.status]}
                                 onUpdate={(val) => setEditFormData({ ...editFormData, status: val[0] })}
-                                options={[
-                                    { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
-                                    { value: 'Yoldadır', content: t('packages.statusInTransit') },
-                                    { value: 'Gömrükdə', content: t('packages.statusCustoms') },
-                                    { value: 'Filialda', content: t('packages.statusAtBranch') }
-                                ]}
+                                options={
+                                    currentUser.isSuperAdmin
+                                        ? [
+                                            { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
+                                            { value: 'Yoldadır', content: t('packages.statusInTransit') },
+                                            { value: 'Gömrükdə', content: t('packages.statusCustoms') },
+                                            { value: 'Filialda', content: t('packages.statusAtBranch') },
+                                            { value: 'Təhvil verildi', content: t('packages.statusDelivered') }
+                                        ]
+                                        : [
+                                            { value: editFormData.status, content: statusLabel(editFormData.status) },
+                                            ...(NEXT_STATUS[editFormData.status] && editFormData.status !== 'Filialda'
+                                                ? [{ value: NEXT_STATUS[editFormData.status], content: statusLabel(NEXT_STATUS[editFormData.status]) }]
+                                                : [])
+                                        ]
+                                }
                                 width="max"
                             />
+                            {!currentUser.isSuperAdmin && editFormData.status === 'Bəyan edildi' && !editFormData.weightConfirmed && (
+                                <Text variant="caption-2" color="warning" style={{ display: 'block', marginTop: '6px' }}>
+                                    {t('packages.weightNotConfirmedGate')}
+                                </Text>
+                            )}
                         </div>
                     )}
                     <div>

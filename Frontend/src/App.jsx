@@ -19,6 +19,7 @@ import AuditLog from './pages/AuditLog';
 import ProhibitedTerms from './pages/ProhibitedTerms';
 import StorageSettings from './pages/StorageSettings';
 import CustomsDuty from './pages/CustomsDuty';
+import WarehouseOperator from './pages/WarehouseOperator';
 import Claims from './pages/Claims';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
@@ -370,6 +371,15 @@ function App() {
                                     Anbarlar
                                 </Button>
                             )}
+                            {hasPermission('packages.editAll') && (
+                                <Button
+                                    view={activePage === 'warehouse-operator' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('warehouse-operator')}
+                                >
+                                    Xarici Anbar Operatoru
+                                </Button>
+                            )}
                             {isSuperAdminUser && (
                                 <Button
                                     view={activePage === 'roles' ? 'action' : 'flat-secondary'}
@@ -477,6 +487,11 @@ function App() {
                                 )}
                                 {activePage === 'manage-warehouses' && (
                                     hasPermission('warehouses.manage') ? <Warehouses /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'warehouse-operator' && (
+                                    hasPermission('packages.editAll') ? <WarehouseOperator /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}
