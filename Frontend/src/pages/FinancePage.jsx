@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, Button, Label, Spin, Modal, Alert } from '@gravity-ui/uikit';
 import { Wallet, Plus, ShieldCheck, ArrowRight, Check } from '@gravity-ui/icons';
 import PaymentModal from '../components/Payment/PaymentModal';
 import api from '../services/api';
 
 const FinancePage = () => {
+    const { t, i18n } = useTranslation();
     const [balance, setBalance] = useState(0);
     const [transactions, setTransactions] = useState([]);
     const [filter, setFilter] = useState('all'); // 'all', 'inkam', 'outcome'
@@ -59,10 +61,19 @@ const FinancePage = () => {
         return true;
     });
 
+    const now = new Date();
+    const monthlyExpenseTransactions = transactions.filter((tx) => {
+        if (tx.type === 'inkam') return false;
+        const d = new Date(tx.created_at);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const monthlySpendTotal = monthlyExpenseTransactions.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const monthlySpendCount = monthlyExpenseTransactions.length;
+
     if (!userId) {
         return (
             <div style={{ padding: '40px', textAlign: 'center' }}>
-                <Text color="danger" variant="header-1">Sistemə daxil olmamısınız!</Text>
+                <Text color="danger" variant="header-1">{t('finance.notLoggedIn')}</Text>
             </div>
         );
     }
@@ -74,10 +85,10 @@ const FinancePage = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <Text variant="header-2" className="gradient-text" style={{ display: 'block', marginBottom: '4px' }}>
-                        Maliyyə və Balans Portalı
+                        {t('finance.title')}
                     </Text>
                     <Text variant="body-2" color="secondary">
-                        Hesabınızın cari balansını idarə edin, onlayn ödəniş edin və faktura tarixçənizə baxın.
+                        {t('finance.subtitle')}
                     </Text>
                 </div>
 
@@ -89,7 +100,7 @@ const FinancePage = () => {
                     style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                 >
                     <Button.Icon><Plus /></Button.Icon>
-                    Balansı Artır (Onlayn Ödəniş)
+                    {t('finance.topUpButton')}
                 </Button>
             </div>
 
@@ -109,7 +120,7 @@ const FinancePage = () => {
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                             <Text variant="caption-2" color="secondary" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                Cari Balansınız
+                                {t('finance.currentBalance')}
                             </Text>
                             <Wallet style={{ color: '#56d364' }} size={24} />
                         </div>
@@ -127,7 +138,7 @@ const FinancePage = () => {
                     </div>
 
                     <div style={{ marginTop: '20px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-                        <Text variant="caption-2" color="secondary">Hesab Statusu: <span style={{ color: '#56d364', fontWeight: 600 }}>Aktiv (Limit Yoxdur)</span></Text>
+                        <Text variant="caption-2" color="secondary">{t('finance.accountStatus')}: <span style={{ color: '#56d364', fontWeight: 600 }}>{t('finance.activeNoLimit')}</span></Text>
                     </div>
                 </Card>
 
@@ -135,32 +146,32 @@ const FinancePage = () => {
                 <Card className="hover-lift" style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <Text variant="caption-2" color="secondary" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
-                            Bu Aykı Xərclər
+                            {t('finance.monthlyExpenses')}
                         </Text>
                         <ShieldCheck style={{ color: '#58a6ff' }} size={24} />
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
                         <Text style={{ fontSize: '42px', fontWeight: 800, color: '#ffffff', lineHeight: '1' }}>
-                            28.40
+                            {monthlySpendTotal.toFixed(2)}
                         </Text>
                         <Text variant="header-2" color="secondary">₼</Text>
                     </div>
 
                     <div style={{ marginTop: '20px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-                        <Text variant="caption-2" color="secondary">4 uğurlu kargo daşınma xidməti</Text>
+                        <Text variant="caption-2" color="secondary">{t('finance.monthlyTransactionsCount', { count: monthlySpendCount })}</Text>
                     </div>
                 </Card>
 
                 {/* Quick Payment Info Card */}
                 <Card className="hover-lift" style={{ padding: '28px', backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px' }}>
                     <Text variant="subheader-2" style={{ color: '#ffffff', marginBottom: '8px', display: 'block' }}>
-                        Təhlükəsiz Ödəniş
+                        {t('finance.securePayment')}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ fontSize: '13px', lineHeight: 1.5, marginBottom: '16px' }}>
-                        Visa, Mastercard və Birkart vasitəsilə 3D Secure təhlükəsizlik standartı altında komissiyasız balans artırın.
+                        {t('finance.securePaymentDesc')}
                     </Text>
-                    <Label theme="info" size="m">SSL 256-Bit Encrypted</Label>
+                    <Label theme="info" size="m">{t('finance.sslLabel')}</Label>
                 </Card>
             </div>
 
@@ -168,16 +179,16 @@ const FinancePage = () => {
             <Card style={{ backgroundColor: '#161b22', borderColor: '#30363d', borderRadius: '16px', overflow: 'hidden' }}>
                 <div style={{ padding: '24px', borderBottom: '1px solid #30363d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <Text variant="header-1" style={{ color: '#ffffff' }}>Ödəniş və Əməliyyat Tarixçəsi</Text>
+                        <Text variant="header-1" style={{ color: '#ffffff' }}>{t('finance.transactionHistory')}</Text>
                         <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '2px', fontSize: '13px' }}>
-                            Hesabınıza mədaxil olan və kargo daşımaları üçün silinən məbləğlərin siyahısı
+                            {t('finance.transactionHistoryDesc')}
                         </Text>
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px' }}>
-                        <Button size="m" view={filter === 'all' ? 'action' : 'outlined'} onClick={() => setFilter('all')}>Hamısı</Button>
-                        <Button size="m" view={filter === 'inkam' ? 'action' : 'outlined'} onClick={() => setFilter('inkam')}>+ Mədaxil</Button>
-                        <Button size="m" view={filter === 'outcome' ? 'action' : 'outlined'} onClick={() => setFilter('outcome')}>- Məxaric</Button>
+                        <Button size="m" view={filter === 'all' ? 'action' : 'outlined'} onClick={() => setFilter('all')}>{t('finance.filterAll')}</Button>
+                        <Button size="m" view={filter === 'inkam' ? 'action' : 'outlined'} onClick={() => setFilter('inkam')}>{t('finance.filterIncome')}</Button>
+                        <Button size="m" view={filter === 'outcome' ? 'action' : 'outlined'} onClick={() => setFilter('outcome')}>{t('finance.filterExpense')}</Button>
                     </div>
                 </div>
 
@@ -185,11 +196,11 @@ const FinancePage = () => {
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#0d1117', borderBottom: '1px solid #30363d' }}>
-                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">Tarix & Vaxt</Text></th>
-                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">Təsvir / Təfərrüat</Text></th>
-                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">Status</Text></th>
-                                <th style={{ padding: '16px 24px', textAlign: 'right' }}><Text color="secondary" variant="caption-2">Məbləğ</Text></th>
-                                <th style={{ padding: '16px 24px', textAlign: 'center' }}><Text color="secondary" variant="caption-2">Qəbz</Text></th>
+                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">{t('finance.colDate')}</Text></th>
+                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">{t('finance.colDescription')}</Text></th>
+                                <th style={{ padding: '16px 24px' }}><Text color="secondary" variant="caption-2">{t('finance.colStatus')}</Text></th>
+                                <th style={{ padding: '16px 24px', textAlign: 'right' }}><Text color="secondary" variant="caption-2">{t('finance.colAmount')}</Text></th>
+                                <th style={{ padding: '16px 24px', textAlign: 'center' }}><Text color="secondary" variant="caption-2">{t('finance.colReceipt')}</Text></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -204,7 +215,7 @@ const FinancePage = () => {
                                     <tr key={tx.id} style={{ borderBottom: '1px solid #21262d', transition: 'background-color 0.2s' }}>
                                         <td style={{ padding: '16px 24px' }}>
                                             <Text color="primary" variant="body-2">
-                                                {new Date(tx.created_at).toLocaleString('az-AZ', {
+                                                {new Date(tx.created_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'az-AZ', {
                                                     year: 'numeric', month: 'short', day: 'numeric',
                                                     hour: '2-digit', minute: '2-digit'
                                                 })}
@@ -212,12 +223,12 @@ const FinancePage = () => {
                                         </td>
                                         <td style={{ padding: '16px 24px' }}>
                                             <Text color="primary" variant="body-2" style={{ fontWeight: 500 }}>
-                                                {tx.description || 'Balans artırımı'}
+                                                {tx.description || t('finance.defaultTopUpDescription')}
                                             </Text>
                                         </td>
                                         <td style={{ padding: '16px 24px' }}>
                                             <Label theme={tx.type === 'inkam' ? 'success' : 'danger'}>
-                                                {tx.type === 'inkam' ? 'Mədaxil (Tamamlandı)' : 'Məxaric'}
+                                                {tx.type === 'inkam' ? t('finance.incomeCompleted') : t('finance.expenseLabel')}
                                             </Label>
                                         </td>
                                         <td style={{ padding: '16px 24px', textAlign: 'right' }}>
@@ -238,13 +249,13 @@ const FinancePage = () => {
                                                 view="flat-info"
                                                 onClick={() => setSelectedReceipt({
                                                     invoiceId: `INV-2026-${tx.id + 8400}`,
-                                                    date: new Date(tx.created_at).toLocaleString('az-AZ'),
+                                                    date: new Date(tx.created_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'az-AZ'),
                                                     amount: parseFloat(tx.amount).toFixed(2),
                                                     type: tx.type,
-                                                    description: tx.description || 'Balans artırımı (Onlayn Ödəniş)'
+                                                    description: tx.description || t('finance.defaultReceiptDescription')
                                                 })}
                                             >
-                                                Qəbz
+                                                {t('finance.receiptButton')}
                                             </Button>
                                         </td>
                                     </tr>
@@ -252,7 +263,7 @@ const FinancePage = () => {
                             ) : (
                                 <tr>
                                     <td colSpan="5" style={{ padding: '40px', textAlign: 'center' }}>
-                                        <Text color="secondary" variant="body-2">Heç bir əməliyyat tapılmadı.</Text>
+                                        <Text color="secondary" variant="body-2">{t('finance.noTransactions')}</Text>
                                     </td>
                                 </tr>
                             )}
@@ -275,25 +286,25 @@ const FinancePage = () => {
                 <Modal open={Boolean(selectedReceipt)} onClose={() => setSelectedReceipt(null)}>
                     <div style={{ padding: '28px', width: '440px', backgroundColor: '#161b22', color: '#ffffff', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '12px' }}>
-                            <Text variant="header-2" style={{ color: '#ffffff' }}>Rəqəmsal Əməliyyat Qəbzi</Text>
-                            <Label theme="success">Tamamlandı</Label>
+                            <Text variant="header-2" style={{ color: '#ffffff' }}>{t('finance.receiptTitle')}</Text>
+                            <Label theme="success">{t('finance.receiptCompleted')}</Label>
                         </div>
 
                         <Card view="outlined" style={{ padding: '16px', backgroundColor: '#0d1117', borderColor: '#30363d', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <Text color="secondary">Faktura №:</Text>
+                                <Text color="secondary">{t('finance.receiptInvoiceNo')}</Text>
                                 <Text style={{ fontWeight: 'bold', color: '#58a6ff' }}>{selectedReceipt.invoiceId}</Text>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <Text color="secondary">Tarix:</Text>
+                                <Text color="secondary">{t('finance.receiptDate')}</Text>
                                 <Text color="primary">{selectedReceipt.date}</Text>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <Text color="secondary">Əməliyyat:</Text>
+                                <Text color="secondary">{t('finance.receiptOperation')}</Text>
                                 <Text color="primary">{selectedReceipt.description}</Text>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #21262d', paddingTop: '8px', marginTop: '4px' }}>
-                                <Text color="secondary">Yekun Məbləğ:</Text>
+                                <Text color="secondary">{t('finance.receiptTotal')}</Text>
                                 <Text style={{ fontWeight: 'bold', color: selectedReceipt.type === 'inkam' ? '#56d364' : '#f85149', fontSize: '18px' }}>
                                     {selectedReceipt.type === 'inkam' ? '+' : '-'}{selectedReceipt.amount} ₼
                                 </Text>
@@ -301,8 +312,8 @@ const FinancePage = () => {
                         </Card>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Button view="outlined" onClick={() => window.print()}>Çap Et</Button>
-                            <Button view="action" onClick={() => setSelectedReceipt(null)}>Bağla</Button>
+                            <Button view="outlined" onClick={() => window.print()}>{t('finance.printButton')}</Button>
+                            <Button view="action" onClick={() => setSelectedReceipt(null)}>{t('finance.closeButton')}</Button>
                         </div>
                     </div>
                 </Modal>

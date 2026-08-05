@@ -351,7 +351,7 @@ const PaymentModal = ({ open, onClose, currentBalance, onPaymentSuccess, userId 
                                     <Text variant="caption-2" color="secondary" style={{ marginBottom: '4px', display: 'block' }}>Kart Sahibinin Adı Soyadı</Text>
                                     <TextInput
                                         size="l"
-                                        placeholder="MƏS: RASHAD ALIYEV"
+                                        placeholder="MƏS: ALI ALIYEV"
                                         value={cardName}
                                         onUpdate={(val) => setCardName(val.toUpperCase())}
                                     />

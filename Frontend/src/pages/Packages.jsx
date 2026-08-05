@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     Table,
     Button,
@@ -39,6 +40,19 @@ import { generateCommercialInvoice } from '../utils/commercialInvoice';
 const API_ORIGIN = 'http://localhost:5000';
 
 const Packages = () => {
+    const { t, i18n } = useTranslation();
+    const locale = i18n.language === 'en' ? 'en-US' : 'az-AZ';
+
+    const STATUS_LABEL = {
+        'Bəyan edildi': t('packages.statusDeclared'),
+        'Yoldadır': t('packages.statusInTransit'),
+        'Gömrükdə': t('packages.statusCustoms'),
+        'Filialda': t('packages.statusAtBranch'),
+        'Təhvil verildi': t('packages.statusDelivered'),
+        'Konsolidasiya edildi': t('packages.statusConsolidated')
+    };
+    const statusLabel = (status) => STATUS_LABEL[status] || status || t('packages.statusNotSet');
+
     // Daxil olan istifadəçini localStroage-dən götürürük
     const currentUser = JSON.parse(localStorage.getItem('user')) || {};
     const hasPermission = (key) => Boolean(currentUser.isSuperAdmin || currentUser.permissions?.includes(key));
@@ -69,8 +83,8 @@ const Packages = () => {
     // Çəki/Qiymət ədəd sahələrinin düzgün, mənfi olmayan rəqəm olduğunu yoxlayır
     const validateNonNegativeNumber = (value, fieldName) => {
         const num = parseFloat(value);
-        if (value === '' || isNaN(num)) return `${fieldName} üçün rəqəm daxil edin!`;
-        if (num < 0) return `${fieldName} mənfi ola bilməz!`;
+        if (value === '' || isNaN(num)) return t('packages.weightFieldError', { field: fieldName });
+        if (num < 0) return t('packages.weightNegativeError', { field: fieldName });
         return null;
     };
 
@@ -229,7 +243,7 @@ const Packages = () => {
             setIsAssignModalOpen(false);
             fetchPackages();
         } catch (error) {
-            alert(error.response?.data?.message || "Kuryer təyin edilərkən xəta baş verdi.");
+            alert(error.response?.data?.message || t('packages.courierAssignError'));
         } finally {
             setAssignSaving(false);
         }
@@ -240,7 +254,7 @@ const Packages = () => {
             await api.put(`/packages/${id}/courier-status`, { status: newStatus });
             fetchPackages();
         } catch (error) {
-            alert(error.response?.data?.message || "Status yenilənərkən xəta baş verdi.");
+            alert(error.response?.data?.message || t('packages.statusUpdateError'));
         }
     };
 
@@ -263,12 +277,12 @@ const Packages = () => {
     const handleConsolidate = async () => {
         setConsolidateError('');
         if (!consolidateTrackingNumber.trim()) {
-            setConsolidateError('Yeni trek nömrəsini daxil edin!');
+            setConsolidateError(t('packages.consolidateTrackingNumberRequired'));
             return;
         }
-        const weightError = validateNonNegativeNumber(consolidateActualWeight, "Real çəki");
+        const weightError = validateNonNegativeNumber(consolidateActualWeight, t('packages.realWeightFieldName'));
         if (weightError || parseFloat(consolidateActualWeight) <= 0) {
-            setConsolidateError('Real çəki müsbət rəqəm olmalıdır!');
+            setConsolidateError(t('packages.realWeightPositiveError'));
             return;
         }
         setConsolidateSaving(true);
@@ -282,7 +296,7 @@ const Packages = () => {
             setSelectedForConsolidation([]);
             fetchPackages();
         } catch (error) {
-            setConsolidateError(error.response?.data?.message || "Konsolidasiya edilərkən xəta baş verdi.");
+            setConsolidateError(error.response?.data?.message || t('packages.consolidateSubmitError'));
         } finally {
             setConsolidateSaving(false);
         }
@@ -298,9 +312,9 @@ const Packages = () => {
 
     const handleConfirmReceiving = async () => {
         setReceivingError('');
-        const weightError = validateNonNegativeNumber(receivingActualWeight, "Real çəki");
+        const weightError = validateNonNegativeNumber(receivingActualWeight, t('packages.realWeightFieldName'));
         if (weightError || parseFloat(receivingActualWeight) <= 0) {
-            setReceivingError('Real çəki müsbət rəqəm olmalıdır!');
+            setReceivingError(t('packages.realWeightPositiveError'));
             return;
         }
         setReceivingSaving(true);
@@ -314,7 +328,7 @@ const Packages = () => {
             setIsReceivingModalOpen(false);
             fetchPackages();
         } catch (error) {
-            setReceivingError(error.response?.data?.message || "Təsdiqlənərkən xəta baş verdi.");
+            setReceivingError(error.response?.data?.message || t('packages.receivingConfirmError'));
         } finally {
             setReceivingSaving(false);
         }
@@ -330,7 +344,7 @@ const Packages = () => {
             const response = await api.get(`/packages/${item.id}/storage-fee`);
             setStorageFeeData(response.data);
         } catch (error) {
-            setStorageError(error.response?.data?.message || "Anbar haqqı hesablanarkən xəta baş verdi.");
+            setStorageError(error.response?.data?.message || t('packages.storageFeeCalcError'));
         } finally {
             setStorageLoading(false);
         }
@@ -345,7 +359,7 @@ const Packages = () => {
             setStorageFeeData(response.data);
             fetchPackages();
         } catch (error) {
-            setStorageError(error.response?.data?.message || "Ödəniş zamanı xəta baş verdi.");
+            setStorageError(error.response?.data?.message || t('packages.paymentError'));
         } finally {
             setStoragePaying(false);
         }
@@ -361,7 +375,7 @@ const Packages = () => {
             const response = await api.get(`/packages/${item.id}/customs-duty`);
             setDutyData(response.data);
         } catch (error) {
-            setDutyError(error.response?.data?.message || "Gömrük rüsumu hesablanarkən xəta baş verdi.");
+            setDutyError(error.response?.data?.message || t('packages.dutyCalcError'));
         } finally {
             setDutyLoading(false);
         }
@@ -376,7 +390,7 @@ const Packages = () => {
             setDutyData(response.data);
             fetchPackages();
         } catch (error) {
-            setDutyError(error.response?.data?.message || "Ödəniş zamanı xəta baş verdi.");
+            setDutyError(error.response?.data?.message || t('packages.paymentError'));
         } finally {
             setDutyPaying(false);
         }
@@ -400,13 +414,13 @@ const Packages = () => {
 
     // Yeni Bağlama Yaratmaq (qiymət sistemin özü tərəfindən çəki × anbar tarifinə görə hesablanır)
     const handleCreate = async () => {
-        if (!addFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
-        const weightError = validateNonNegativeNumber(addFormData.weight, "Çəki");
+        if (!addFormData.trackingNumber.trim()) return alert(t('packages.enterTrackingNumber'));
+        const weightError = validateNonNegativeNumber(addFormData.weight, t('packages.weightFieldName'));
         if (weightError) return alert(weightError);
-        if (!addFormData.warehouseId) return alert("Anbar seçin!");
+        if (!addFormData.warehouseId) return alert(t('packages.selectWarehouseError'));
         if (addFormData.isInsured) {
-            const declaredValueError = validateNonNegativeNumber(addFormData.declaredValue, "Bəyan edilmiş dəyər");
-            if (declaredValueError || parseFloat(addFormData.declaredValue) <= 0) return alert("Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!");
+            const declaredValueError = validateNonNegativeNumber(addFormData.declaredValue, t('packages.declaredValueFieldName'));
+            if (declaredValueError || parseFloat(addFormData.declaredValue) <= 0) return alert(t('packages.insuranceValueError'));
         }
         try {
             await api.post('/packages', {
@@ -424,21 +438,21 @@ const Packages = () => {
             fetchPackages();
         } catch (error) {
             console.error("Yaradılarkən xəta:", error);
-            alert(error.response?.data?.message || "Bağlama yaradılarkən xəta baş verdi.");
+            alert(error.response?.data?.message || t('packages.packageCreateError'));
         }
     };
 
     const handleUpdate = async () => {
-        if (!editFormData.trackingNumber.trim()) return alert("Trek nömrəsini daxil edin!");
-        const weightError = validateNonNegativeNumber(editFormData.weight, "Çəki");
+        if (!editFormData.trackingNumber.trim()) return alert(t('packages.enterTrackingNumber'));
+        const weightError = validateNonNegativeNumber(editFormData.weight, t('packages.weightFieldName'));
         if (weightError) return alert(weightError);
         if (canChangeStatus) {
-            const priceError = validateNonNegativeNumber(editFormData.price, "Qiymət");
+            const priceError = validateNonNegativeNumber(editFormData.price, t('packages.priceFieldName'));
             if (priceError) return alert(priceError);
         }
         if (editFormData.isInsured) {
-            const declaredValueError = validateNonNegativeNumber(editFormData.declaredValue, "Bəyan edilmiş dəyər");
-            if (declaredValueError || parseFloat(editFormData.declaredValue) <= 0) return alert("Sığorta üçün bəyan edilmiş dəyər müsbət rəqəm olmalıdır!");
+            const declaredValueError = validateNonNegativeNumber(editFormData.declaredValue, t('packages.declaredValueFieldName'));
+            if (declaredValueError || parseFloat(editFormData.declaredValue) <= 0) return alert(t('packages.insuranceValueError'));
         }
         try {
             await api.put(`/packages/${editFormData.id}`, editFormData);
@@ -467,7 +481,7 @@ const Packages = () => {
     };
 
     const handleSoftDelete = async (id) => {
-        if (window.confirm("Bu bağlama Zibil Qutusuna (Arxivə) göndərilsin?")) {
+        if (window.confirm(t('packages.confirmArchive'))) {
             try {
                 await api.delete(`/packages/${id}`);
                 fetchPackages();
@@ -487,7 +501,7 @@ const Packages = () => {
     };
 
     const handleHardDelete = async (id) => {
-        if (window.confirm("DİQQƏT! Bu bağlama verilənlər bazasından HƏMİŞƏLİK silinəcək. Əminsiniz?")) {
+        if (window.confirm(t('packages.confirmHardDelete'))) {
             try {
                 await api.delete(`/packages/${id}/hard`);
                 fetchPackages();
@@ -510,7 +524,7 @@ const Packages = () => {
     const filteredPackages = Array.isArray(packages) ? packages : [];
 
     const handleExportExcel = () => {
-        if (filteredPackages.length === 0) return alert("Eksport üçün məlumat yoxdur!");
+        if (filteredPackages.length === 0) return alert(t('packages.exportNoData'));
 
         const excelHtml = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -522,10 +536,10 @@ const Packages = () => {
         </style>
       </head>
       <body>
-        <h2>${activeTab === 'active' ? 'Aktiv Bağlamalar' : 'Arxivdəki Bağlamalar'}</h2>
+        <h2>${activeTab === 'active' ? t('packages.tabActive') : t('packages.tabArchived')}</h2>
         <table>
           <thead>
-            <tr><th>ID</th><th>Trek Nömrəsi</th><th>Çəki (kq)</th><th>Qiymət ($)</th><th>Status</th><th>Tarix</th></tr>
+            <tr><th>${t('packages.colId')}</th><th>${t('packages.colTrackingNumber')}</th><th>${t('packages.colWeight')}</th><th>${t('packages.colPrice')}</th><th>${t('packages.colStatus')}</th><th>${t('packages.colDate')}</th></tr>
           </thead>
           <tbody>
             ${filteredPackages.map(pkg => `
@@ -534,8 +548,8 @@ const Packages = () => {
                 <td><b>${pkg.trackingNumber || ''}</b></td>
                 <td>${parseFloat(pkg.weight).toFixed(2)} kq</td>
                 <td>$${parseFloat(pkg.price).toFixed(2)}</td>
-                <td>${pkg.status || ''}</td>
-                <td>${pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString('az-AZ') : ''}</td>
+                <td>${statusLabel(pkg.status)}</td>
+                <td>${pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString(locale) : ''}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -544,7 +558,7 @@ const Packages = () => {
       </html>
     `;
 
-        const blob = new Blob(['\uFEFF' + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const blob = new Blob(['﻿' + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -556,7 +570,7 @@ const Packages = () => {
 
     const renderStatusBadge = (status) => {
         const themeMap = { 'Bəyan edildi': 'info', 'Yoldadır': 'warning', 'Gömrükdə': 'danger', 'Filialda': 'success', 'Təhvil verildi': 'success', 'Konsolidasiya edildi': 'utility' };
-        return <Label theme={themeMap[status] || 'normal'}>{status || 'Təyin edilməyib'}</Label>;
+        return <Label theme={themeMap[status] || 'normal'}>{statusLabel(status)}</Label>;
     };
 
     const consolidationTargetTrackingNumber = (consolidatedIntoId) => {
@@ -583,28 +597,28 @@ const Packages = () => {
                 />
             )
         }] : []),
-        { id: 'id', name: 'ID', meta: { width: '60px' } },
-        { id: 'trackingNumber', name: 'Trek Nömrəsi', template: (item) => <strong>{item.trackingNumber}</strong> },
-        { id: 'weight', name: 'Çəki (kq)', template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
-        { id: 'price', name: 'Qiymət ($)', template: (item) => `$${parseFloat(item.price).toFixed(2)}` },
+        { id: 'id', name: t('packages.colId'), meta: { width: '60px' } },
+        { id: 'trackingNumber', name: t('packages.colTrackingNumber'), template: (item) => <strong>{item.trackingNumber}</strong> },
+        { id: 'weight', name: t('packages.colWeight'), template: (item) => `${parseFloat(item.weight).toFixed(2)} kq` },
+        { id: 'price', name: t('packages.colPrice'), template: (item) => `$${parseFloat(item.price).toFixed(2)}` },
         {
             id: 'insurance',
-            name: 'Sığorta',
+            name: t('packages.colInsurance'),
             template: (item) => item.isInsured
                 ? <Label theme="success" icon={<Icon data={ShieldCheck} size={14} />}>${parseFloat(item.declaredValue).toFixed(2)}</Label>
                 : <Text color="secondary">—</Text>
         },
         ...(canConsolidate ? [{
             id: 'receiving',
-            name: 'Anbar Təsdiqi',
+            name: t('packages.colReceivingStatus'),
             template: (item) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Label theme={item.weightConfirmed ? 'success' : 'normal'}>
-                        {item.weightConfirmed ? 'Təsdiqlənib' : 'Təsdiqlənməyib'}
+                        {item.weightConfirmed ? t('packages.receivingConfirmed') : t('packages.receivingUnconfirmed')}
                     </Label>
                     {item.receivingPhotoUrl && (
                         <a href={`${API_ORIGIN}${item.receivingPhotoUrl}`} target="_blank" rel="noopener noreferrer">
-                            <img src={`${API_ORIGIN}${item.receivingPhotoUrl}`} alt="Qəbul şəkli" width={28} height={28} style={{ borderRadius: '4px', objectFit: 'cover', border: '1px solid #30363d' }} />
+                            <img src={`${API_ORIGIN}${item.receivingPhotoUrl}`} alt={t('packages.receivingPhotoAlt')} width={28} height={28} style={{ borderRadius: '4px', objectFit: 'cover', border: '1px solid #30363d' }} />
                         </a>
                     )}
                 </div>
@@ -612,7 +626,7 @@ const Packages = () => {
         }] : []),
         {
             id: 'status',
-            name: 'Status',
+            name: t('packages.colStatus'),
             template: (item) => (
                 <div>
                     {renderStatusBadge(item.status)}
@@ -626,19 +640,19 @@ const Packages = () => {
         },
         ...(canAssignCourier ? [{
             id: 'courier',
-            name: 'Kuryer',
+            name: t('packages.colCourier'),
             template: (item) => courierName(item.assignedCourierId)
                 ? <Label theme="normal">{courierName(item.assignedCourierId)}</Label>
-                : <Text color="secondary">Təyin edilməyib</Text>
+                : <Text color="secondary">{t('packages.courierUnassigned')}</Text>
         }] : []),
         {
             id: 'createdAt',
-            name: 'Tarix',
-            template: (item) => item.createdAt ? new Date(item.createdAt).toLocaleDateString('az-AZ') : '—'
+            name: t('packages.colDate'),
+            template: (item) => item.createdAt ? new Date(item.createdAt).toLocaleDateString(locale) : '—'
         },
         {
             id: 'actions',
-            name: 'Əməliyyatlar',
+            name: t('packages.colActions'),
             template: (item) => (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {activeTab === 'active' ? (
@@ -648,17 +662,17 @@ const Packages = () => {
                                     value={[item.status || 'Yoldadır']}
                                     onUpdate={(val) => handleCourierStatusUpdate(item.id, val[0])}
                                     options={[
-                                        { value: 'Yoldadır', content: 'Yoldadır' },
-                                        { value: 'Gömrükdə', content: 'Gömrükdə' },
-                                        { value: 'Filialda', content: 'Filialda' },
-                                        { value: 'Təhvil verildi', content: 'Təhvil verildi' }
+                                        { value: 'Yoldadır', content: t('packages.statusInTransit') },
+                                        { value: 'Gömrükdə', content: t('packages.statusCustoms') },
+                                        { value: 'Filialda', content: t('packages.statusAtBranch') },
+                                        { value: 'Təhvil verildi', content: t('packages.statusDelivered') }
                                     ]}
                                     size="s"
                                 />
-                                <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title="Tarixçəyə Bax">
+                                <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title={t('packages.historyButton')}>
                                     <Icon data={Clock} />
                                 </Button>
-                                <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title="Barkod / QR Kod">
+                                <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title={t('packages.barcodeButton')}>
                                     <Icon data={QrCode} />
                                 </Button>
                             </>
@@ -670,45 +684,45 @@ const Packages = () => {
                                     value={[item.status || 'Bəyan edildi']}
                                     onUpdate={(val) => handleStatusChange(item.id, val[0], item)}
                                     options={[
-                                        { value: 'Bəyan edildi', content: 'Bəyan edildi' },
-                                        { value: 'Yoldadır', content: 'Yoldadır' },
-                                        { value: 'Gömrükdə', content: 'Gömrükdə' },
-                                        { value: 'Filialda', content: 'Filialda' }
+                                        { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
+                                        { value: 'Yoldadır', content: t('packages.statusInTransit') },
+                                        { value: 'Gömrükdə', content: t('packages.statusCustoms') },
+                                        { value: 'Filialda', content: t('packages.statusAtBranch') }
                                     ]}
                                     size="s"
                                 />
                             )}
-                            <Button view="flat-secondary" size="s" onClick={() => openEditModal(item)} title="Redaktə Et">
+                            <Button view="flat-secondary" size="s" onClick={() => openEditModal(item)} title={t('packages.editButton')}>
                                 <Icon data={Pencil} />
                             </Button>
-                            <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title="Tarixçəyə Bax">
+                            <Button view="flat-secondary" size="s" onClick={() => openHistoryModal(item)} title={t('packages.historyButton')}>
                                 <Icon data={Clock} />
                             </Button>
-                            <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title="Barkod / QR Kod">
+                            <Button view="flat-secondary" size="s" onClick={() => openBarcodeModal(item)} title={t('packages.barcodeButton')}>
                                 <Icon data={QrCode} />
                             </Button>
-                            <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title="Kommersiya Fakturası (PDF)">
+                            <Button view="flat-secondary" size="s" onClick={() => generateCommercialInvoice(item)} title={t('packages.invoiceButton')}>
                                 <Icon data={FileText} />
                             </Button>
-                            <Button view="flat-secondary" size="s" onClick={() => openDutyModal(item)} title="Gömrük Rüsumu">
+                            <Button view="flat-secondary" size="s" onClick={() => openDutyModal(item)} title={t('packages.dutyButton')}>
                                 <Icon data={Percent} />
                             </Button>
                             {item.arrivedAtBranchAt && (
-                                <Button view="flat-secondary" size="s" onClick={() => openStorageModal(item)} title="Anbar Saxlama Haqqı">
+                                <Button view="flat-secondary" size="s" onClick={() => openStorageModal(item)} title={t('packages.storageButton')}>
                                     <Icon data={Wallet} />
                                 </Button>
                             )}
                             {canConsolidate && (
-                                <Button view="flat-secondary" size="s" onClick={() => openReceivingModal(item)} title="Anbarda Çəkini Təsdiqlə">
+                                <Button view="flat-secondary" size="s" onClick={() => openReceivingModal(item)} title={t('packages.receivingButton')}>
                                     <Icon data={WeightHanging} />
                                 </Button>
                             )}
                             {canAssignCourier && (
-                                <Button view="flat-secondary" size="s" onClick={() => openAssignModal(item)} title="Kuryer Təyin Et">
+                                <Button view="flat-secondary" size="s" onClick={() => openAssignModal(item)} title={t('packages.assignCourierButton')}>
                                     <Icon data={PersonWorker} />
                                 </Button>
                             )}
-                            <Button view="flat-warning" size="s" onClick={() => handleSoftDelete(item.id)} title="Zibil Qutusuna At">
+                            <Button view="flat-warning" size="s" onClick={() => handleSoftDelete(item.id)} title={t('packages.archiveButton')}>
                                 <Icon data={TrashBin} />
                             </Button>
                         </>
@@ -718,7 +732,7 @@ const Packages = () => {
                             {/* Bərpa və Tam silmə - icazəyə görə ayrı-ayrı */}
                             {canRestore && (
                                 <Button view="action" size="s" onClick={() => handleRestore(item.id)}>
-                                    <Icon data={ArrowRotateLeft} /> Bərpa Et
+                                    <Icon data={ArrowRotateLeft} /> {t('packages.restoreButton')}
                                 </Button>
                             )}
                             {canHardDelete && (
@@ -739,17 +753,17 @@ const Packages = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <Text variant="header-2" className="gradient-text">
-                        {isCourierUser ? "Mənə Təyin Olunmuş Bağlamalar" : canViewAll ? "Bütün Bağlamalar" : "Mənim Bağlamalarım"}
+                        {isCourierUser ? t('packages.titleAssigned') : canViewAll ? t('packages.titleAll') : t('packages.titleMine')}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                        {isCourierUser ? "Sizə həvalə edilmiş bağlamaların statusunu yeniləyin." : canViewAll ? "Sistemdəki bütün istifadəçi bağlamalarını idarə edin." : "Sifariş etdiyiniz bağlamaları bəyan edin və izləyin."}
+                        {isCourierUser ? t('packages.subtitleAssigned') : canViewAll ? t('packages.subtitleAll') : t('packages.subtitleMine')}
                     </Text>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <Button view="outlined" size="l" onClick={handleExportExcel}>
                         <Icon data={ArrowDownToSquare} />
-                        Excel-ə Çıxar (.xls)
+                        {t('packages.exportButton')}
                     </Button>
 
                     {activeTab === 'active' && !isCourierUser && (
@@ -761,7 +775,7 @@ const Packages = () => {
                             style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}
                         >
                             <Icon data={Plus} />
-                            Yeni Bağlama Bəyan Et
+                            {t('packages.declareButton')}
                         </Button>
                     )}
                 </div>
@@ -769,11 +783,11 @@ const Packages = () => {
 
             {canConsolidate && selectedForConsolidation.length >= 2 && (
                 <Card style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6' }}>
-                    <Text variant="body-2">{selectedForConsolidation.length} bağlama seçildi (ümumi bəyan edilmiş çəki: {totalDeclaredWeight.toFixed(2)} kq)</Text>
+                    <Text variant="body-2">{t('packages.selectedCount', { count: selectedForConsolidation.length, weight: totalDeclaredWeight.toFixed(2) })}</Text>
                     <div style={{ display: 'flex', gap: '10px' }}>
-                        <Button view="flat" size="s" onClick={() => setSelectedForConsolidation([])}>Seçimi Ləğv Et</Button>
+                        <Button view="flat" size="s" onClick={() => setSelectedForConsolidation([])}>{t('packages.cancelSelection')}</Button>
                         <Button view="action" size="s" onClick={openConsolidateModal}>
-                            <Icon data={Layers} /> Konsolidasiya Et
+                            <Icon data={Layers} /> {t('packages.consolidateButton')}
                         </Button>
                     </div>
                 </Card>
@@ -785,8 +799,8 @@ const Packages = () => {
                     value={activeTab}
                     onUpdate={handleTabChange}
                     options={[
-                        { value: 'active', content: 'Aktiv Bağlamalar' },
-                        { value: 'archived', content: 'Zibil Qutusu (Arxiv)' }
+                        { value: 'active', content: t('packages.tabActive') },
+                        { value: 'archived', content: t('packages.tabArchived') }
                     ]}
                 />
             </div>
@@ -794,7 +808,7 @@ const Packages = () => {
             <Card style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ flex: 2, minWidth: '240px' }}>
                     <TextInput
-                        placeholder="Trek nömrəsi ilə canlı axtarış..."
+                        placeholder={t('packages.searchPlaceholder')}
                         value={searchQuery}
                         onChange={(e) => handleSearchChange(e.target.value)}
                         hasClearable
@@ -808,11 +822,11 @@ const Packages = () => {
                         value={selectedStatus}
                         onUpdate={handleStatusFilterChange}
                         options={[
-                            { value: 'ALL', content: 'Bütün Statuslar' },
-                            { value: 'Bəyan edildi', content: 'Bəyan edildi' },
-                            { value: 'Yoldadır', content: 'Yoldadır' },
-                            { value: 'Gömrükdə', content: 'Gömrükdə' },
-                            { value: 'Filialda', content: 'Filialda' }
+                            { value: 'ALL', content: t('packages.allStatuses') },
+                            { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
+                            { value: 'Yoldadır', content: t('packages.statusInTransit') },
+                            { value: 'Gömrükdə', content: t('packages.statusCustoms') },
+                            { value: 'Filialda', content: t('packages.statusAtBranch') }
                         ]}
                         size="l"
                         width="max"
@@ -821,14 +835,14 @@ const Packages = () => {
 
                 {(searchQuery || selectedStatus[0] !== 'ALL') && (
                     <Button view="flat" size="l" onClick={() => { handleSearchChange(''); handleStatusFilterChange(['ALL']); }}>
-                        Sıfırla
+                        {t('packages.resetButton')}
                     </Button>
                 )}
             </Card>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
                 <Text variant="caption-2" color="secondary">
-                    Göstərilir: <strong>{filteredPackages.length}</strong> / {total} bağlama
+                    {t('packages.showingCount', { count: filteredPackages.length, total })}
                 </Text>
             </div>
 
@@ -840,7 +854,7 @@ const Packages = () => {
                 ) : (
                     <div style={{ padding: '40px', textAlign: 'center' }}>
                         <Text variant="subheader-1" color="secondary">
-                            {activeTab === 'active' ? 'Bağlama tapılmadı.' : 'Zibil qutusu boşdur.'}
+                            {activeTab === 'active' ? t('packages.noPackagesActive') : t('packages.archiveEmpty')}
                         </Text>
                     </div>
                 )}
@@ -860,28 +874,28 @@ const Packages = () => {
             {/* MODALLAR */}
             <Modal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Yeni Bağlama Bəyanı</Text>
+                    <Text variant="header-1">{t('packages.addModalTitle')}</Text>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Trek Nömrəsi *</Text>
-                        <TextInput placeholder="Məs: AZ12345678" value={addFormData.trackingNumber} onChange={(e) => setAddFormData({ ...addFormData, trackingNumber: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.trackingNumberRequiredLabel')}</Text>
+                        <TextInput placeholder={t('packages.trackingNumberPlaceholder')} value={addFormData.trackingNumber} onChange={(e) => setAddFormData({ ...addFormData, trackingNumber: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Xarici Anbar *</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.foreignWarehouseLabel')}</Text>
                         <Select
                             value={addFormData.warehouseId ? [String(addFormData.warehouseId)] : []}
                             onUpdate={(val) => setAddFormData({ ...addFormData, warehouseId: val[0] })}
                             options={warehouses.map((w) => ({ value: String(w.id), content: `${w.flag || ''} ${w.name} ($${parseFloat(w.ratePerKg).toFixed(2)}/kq)` }))}
-                            placeholder="Anbar seçin"
+                            placeholder={t('packages.warehousePlaceholder')}
                             width="max"
                         />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Çəki (kq)</Text>
-                        <TextInput type="number" min="0" step="0.01" placeholder="Məs: 1.5" value={addFormData.weight} onChange={(e) => setAddFormData({ ...addFormData, weight: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.weightLabel')}</Text>
+                        <TextInput type="number" min="0" step="0.01" placeholder={t('packages.weightPlaceholder')} value={addFormData.weight} onChange={(e) => setAddFormData({ ...addFormData, weight: e.target.value })} />
                     </div>
                     {addFormData.weight && addFormData.warehouseId && (
                         <div style={{ padding: '10px 14px', backgroundColor: '#0d1117', borderRadius: '8px', border: '1px solid #21262d' }}>
-                            <Text variant="caption-2" color="secondary">Təxmini Qiymət (avtomatik hesablanır)</Text>
+                            <Text variant="caption-2" color="secondary">{t('packages.estimatedPriceLabel')}</Text>
                             <Text variant="subheader-2" style={{ display: 'block', color: '#56d364' }}>
                                 ${estimatedPrice(addFormData.weight, addFormData.warehouseId)}
                             </Text>
@@ -892,53 +906,53 @@ const Packages = () => {
                             checked={addFormData.isInsured}
                             onUpdate={(checked) => setAddFormData({ ...addFormData, isInsured: checked })}
                         >
-                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> Bağlamanı sığortala ({(INSURANCE_RATE * 100).toFixed(0)}% haqq)
+                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> {t('packages.insureCheckbox', { percent: (INSURANCE_RATE * 100).toFixed(0) })}
                         </Checkbox>
                     </div>
                     {addFormData.isInsured && (
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bəyan Edilmiş Dəyər ($) *</Text>
-                            <TextInput type="number" min="0" step="0.01" placeholder="Məs: 100" value={addFormData.declaredValue} onChange={(e) => setAddFormData({ ...addFormData, declaredValue: e.target.value })} />
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.declaredValueLabel')}</Text>
+                            <TextInput type="number" min="0" step="0.01" placeholder={t('packages.declaredValuePlaceholder')} value={addFormData.declaredValue} onChange={(e) => setAddFormData({ ...addFormData, declaredValue: e.target.value })} />
                             {addFormData.declaredValue && (
                                 <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                                    Sığorta haqqı: ${estimatedInsuranceFee(addFormData.declaredValue)}
+                                    {t('packages.insuranceFeeLabel', { amount: estimatedInsuranceFee(addFormData.declaredValue) })}
                                 </Text>
                             )}
                         </div>
                     )}
-                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>Gömrük Məlumatları (könüllü)</Text>
+                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>{t('packages.customsInfoTitle')}</Text>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>HS Kodu</Text>
-                        <TextInput placeholder="Məs: 6109.10" value={addFormData.hsCode} onChange={(e) => setAddFormData({ ...addFormData, hsCode: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.hsCodeLabel')}</Text>
+                        <TextInput placeholder={t('packages.hsCodePlaceholder')} value={addFormData.hsCode} onChange={(e) => setAddFormData({ ...addFormData, hsCode: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mal Təsviri</Text>
-                        <TextInput placeholder="Məs: Pambıq t-shirt" value={addFormData.itemDescription} onChange={(e) => setAddFormData({ ...addFormData, itemDescription: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.itemDescriptionLabel')}</Text>
+                        <TextInput placeholder={t('packages.itemDescriptionPlaceholder')} value={addFormData.itemDescription} onChange={(e) => setAddFormData({ ...addFormData, itemDescription: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mənşə Ölkəsi</Text>
-                        <TextInput placeholder="Məs: Türkiyə" value={addFormData.countryOfOrigin} onChange={(e) => setAddFormData({ ...addFormData, countryOfOrigin: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.countryOfOriginLabel')}</Text>
+                        <TextInput placeholder={t('packages.countryOfOriginPlaceholder')} value={addFormData.countryOfOrigin} onChange={(e) => setAddFormData({ ...addFormData, countryOfOrigin: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                        <Button view="flat" onClick={() => setIsAddModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleCreate}>Əlavə et</Button>
+                        <Button view="flat" onClick={() => setIsAddModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleCreate}>{t('packages.addButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Bağlamanı Redaktə Et</Text>
+                    <Text variant="header-1">{t('packages.editModalTitle')}</Text>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Trek Nömrəsi</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.trackingNumberLabel')}</Text>
                         <TextInput value={editFormData.trackingNumber} onChange={(e) => setEditFormData({ ...editFormData, trackingNumber: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Çəki (kq)</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.weightLabel')}</Text>
                         <TextInput type="number" min="0" step="0.01" value={editFormData.weight} onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Qiymət ($)</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.priceLabel')}</Text>
                         {canChangeStatus ? (
                             <TextInput type="number" min="0" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} />
                         ) : (
@@ -946,21 +960,21 @@ const Packages = () => {
                                 <Text variant="subheader-2" style={{ color: '#56d364' }}>
                                     ${estimatedPrice(editFormData.weight, editFormData.warehouseId)}
                                 </Text>
-                                <Text variant="caption-2" color="secondary" style={{ display: 'block' }}>Çəkiyə görə avtomatik hesablanır</Text>
+                                <Text variant="caption-2" color="secondary" style={{ display: 'block' }}>{t('packages.autoCalculatedByWeight')}</Text>
                             </div>
                         )}
                     </div>
                     {canChangeStatus && (
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Status</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('claims.statusLabel')}</Text>
                             <Select
                                 value={[editFormData.status]}
                                 onUpdate={(val) => setEditFormData({ ...editFormData, status: val[0] })}
                                 options={[
-                                    { value: 'Bəyan edildi', content: 'Bəyan edildi' },
-                                    { value: 'Yoldadır', content: 'Yoldadır' },
-                                    { value: 'Gömrükdə', content: 'Gömrükdə' },
-                                    { value: 'Filialda', content: 'Filialda' }
+                                    { value: 'Bəyan edildi', content: t('packages.statusDeclared') },
+                                    { value: 'Yoldadır', content: t('packages.statusInTransit') },
+                                    { value: 'Gömrükdə', content: t('packages.statusCustoms') },
+                                    { value: 'Filialda', content: t('packages.statusAtBranch') }
                                 ]}
                                 width="max"
                             />
@@ -971,49 +985,49 @@ const Packages = () => {
                             checked={editFormData.isInsured}
                             onUpdate={(checked) => setEditFormData({ ...editFormData, isInsured: checked })}
                         >
-                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> Bağlamanı sığortala ({(INSURANCE_RATE * 100).toFixed(0)}% haqq)
+                            <Icon data={ShieldCheck} size={14} style={{ marginRight: '4px' }} /> {t('packages.insureCheckbox', { percent: (INSURANCE_RATE * 100).toFixed(0) })}
                         </Checkbox>
                     </div>
                     {editFormData.isInsured && (
                         <div>
-                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bəyan Edilmiş Dəyər ($) *</Text>
+                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.declaredValueLabel')}</Text>
                             <TextInput type="number" min="0" step="0.01" value={editFormData.declaredValue} onChange={(e) => setEditFormData({ ...editFormData, declaredValue: e.target.value })} />
                             {editFormData.declaredValue && (
                                 <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                                    Sığorta haqqı: ${estimatedInsuranceFee(editFormData.declaredValue)}
+                                    {t('packages.insuranceFeeLabel', { amount: estimatedInsuranceFee(editFormData.declaredValue) })}
                                 </Text>
                             )}
                         </div>
                     )}
-                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>Gömrük Məlumatları (könüllü)</Text>
+                    <Text variant="subheader-2" style={{ marginTop: '4px' }}>{t('packages.customsInfoTitle')}</Text>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>HS Kodu</Text>
-                        <TextInput placeholder="Məs: 6109.10" value={editFormData.hsCode} onChange={(e) => setEditFormData({ ...editFormData, hsCode: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.hsCodeLabel')}</Text>
+                        <TextInput placeholder={t('packages.hsCodePlaceholder')} value={editFormData.hsCode} onChange={(e) => setEditFormData({ ...editFormData, hsCode: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mal Təsviri</Text>
-                        <TextInput placeholder="Məs: Pambıq t-shirt" value={editFormData.itemDescription} onChange={(e) => setEditFormData({ ...editFormData, itemDescription: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.itemDescriptionLabel')}</Text>
+                        <TextInput placeholder={t('packages.itemDescriptionPlaceholder')} value={editFormData.itemDescription} onChange={(e) => setEditFormData({ ...editFormData, itemDescription: e.target.value })} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mənşə Ölkəsi</Text>
-                        <TextInput placeholder="Məs: Türkiyə" value={editFormData.countryOfOrigin} onChange={(e) => setEditFormData({ ...editFormData, countryOfOrigin: e.target.value })} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.countryOfOriginLabel')}</Text>
+                        <TextInput placeholder={t('packages.countryOfOriginPlaceholder')} value={editFormData.countryOfOrigin} onChange={(e) => setEditFormData({ ...editFormData, countryOfOrigin: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                        <Button view="flat" onClick={() => setIsEditModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleUpdate}>Yadda saxla</Button>
+                        <Button view="flat" onClick={() => setIsEditModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleUpdate}>{t('claims.saveButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)}>
                 <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Status Tarixçəsi</Text>
-                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{historyTrackingNumber}</strong></Text>
+                    <Text variant="header-1">{t('packages.historyModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{t('packages.trackingNumberColon')} <strong>{historyTrackingNumber}</strong></Text>
 
                     {historyLoading ? (
                         <div style={{ padding: '20px', textAlign: 'center' }}><Loader size="m" /></div>
                     ) : historyData.length === 0 ? (
-                        <Text color="secondary">Tarixçə tapılmadı.</Text>
+                        <Text color="secondary">{t('packages.historyNotFound')}</Text>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             {historyData.map((h, idx) => (
@@ -1024,10 +1038,10 @@ const Packages = () => {
                                         flexShrink: 0
                                     }} />
                                     <Text variant="body-2" style={{ fontWeight: idx === historyData.length - 1 ? 600 : 400 }}>
-                                        {h.status}
+                                        {statusLabel(h.status)}
                                     </Text>
                                     <Text variant="caption-2" color="secondary" style={{ marginLeft: 'auto' }}>
-                                        {new Date(h.changedAt).toLocaleString('az-AZ', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(h.changedAt).toLocaleString(locale, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                     </Text>
                                 </div>
                             ))}
@@ -1035,36 +1049,36 @@ const Packages = () => {
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                        <Button view="flat" onClick={() => setIsHistoryModalOpen(false)}>Bağla</Button>
+                        <Button view="flat" onClick={() => setIsHistoryModalOpen(false)}>{t('finance.closeButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Kuryer Təyin Et</Text>
-                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{assignTarget?.trackingNumber}</strong></Text>
+                    <Text variant="header-1">{t('packages.assignModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{t('packages.trackingNumberColon')} <strong>{assignTarget?.trackingNumber}</strong></Text>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Kuryer</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.courierLabel')}</Text>
                         <Select
                             value={assignCourierId ? [assignCourierId] : []}
                             onUpdate={(val) => setAssignCourierId(val[0] || '')}
                             options={[
-                                { value: '', content: 'Təyinatı ləğv et' },
+                                { value: '', content: t('packages.unassignOption') },
                                 ...couriers.map((c) => ({ value: String(c.id), content: `${c.firstName} ${c.lastName} (${c.email})` }))
                             ]}
-                            placeholder="Kuryer seçin"
+                            placeholder={t('packages.courierPlaceholder')}
                             width="max"
                         />
                         {couriers.length === 0 && (
                             <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '6px' }}>
-                                Sistemdə kuryer rolunda istifadəçi tapılmadı.
+                                {t('packages.noCouriersFound')}
                             </Text>
                         )}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                        <Button view="flat" onClick={() => setIsAssignModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleAssignCourier} loading={assignSaving}>Yadda saxla</Button>
+                        <Button view="flat" onClick={() => setIsAssignModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleAssignCourier} loading={assignSaving}>{t('claims.saveButton')}</Button>
                     </div>
                 </div>
             </Modal>
@@ -1077,14 +1091,14 @@ const Packages = () => {
 
             <Modal open={isConsolidateModalOpen} onClose={() => setIsConsolidateModalOpen(false)}>
                 <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Bağlamaları Konsolidasiya Et</Text>
+                    <Text variant="header-1">{t('packages.consolidateModalTitle')}</Text>
                     <Text variant="body-2" color="secondary">
-                        Seçilmiş {selectedPackagesForConsolidation.length} bağlama tək bir bağlamaya birləşdiriləcək:
+                        {t('packages.consolidateIntro', { count: selectedPackagesForConsolidation.length })}
                     </Text>
                     <Card style={{ padding: '12px', backgroundColor: '#0d1117', maxHeight: '120px', overflowY: 'auto' }}>
                         {selectedPackagesForConsolidation.map((p) => (
                             <Text key={p.id} variant="body-2" style={{ display: 'block' }}>
-                                {p.trackingNumber} — {parseFloat(p.weight).toFixed(2)} kq (bəyan edilmiş)
+                                {p.trackingNumber} — {parseFloat(p.weight).toFixed(2)} kq {t('packages.declaredSuffix')}
                             </Text>
                         ))}
                     </Card>
@@ -1096,30 +1110,30 @@ const Packages = () => {
                     )}
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Yeni Trek Nömrəsi *</Text>
-                        <TextInput placeholder="Məs: CONSOL-00123" value={consolidateTrackingNumber} onChange={(e) => setConsolidateTrackingNumber(e.target.value)} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.newTrackingNumberLabel')}</Text>
+                        <TextInput placeholder={t('packages.newTrackingNumberPlaceholder')} value={consolidateTrackingNumber} onChange={(e) => setConsolidateTrackingNumber(e.target.value)} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Real Ölçülmüş Ümumi Çəki (kq) *</Text>
-                        <TextInput type="number" min="0" step="0.01" placeholder="Anbarda ölçülən son çəki" value={consolidateActualWeight} onChange={(e) => setConsolidateActualWeight(e.target.value)} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.actualWeightLabel')}</Text>
+                        <TextInput type="number" min="0" step="0.01" placeholder={t('packages.actualWeightPlaceholder')} value={consolidateActualWeight} onChange={(e) => setConsolidateActualWeight(e.target.value)} />
                         <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                            Bəyan edilmiş cəmi çəki: {totalDeclaredWeight.toFixed(2)} kq (istinad üçün — real çəki fərqli ola bilər)
+                            {t('packages.totalDeclaredWeightHint', { weight: totalDeclaredWeight.toFixed(2) })}
                         </Text>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                        <Button view="flat" onClick={() => setIsConsolidateModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleConsolidate} loading={consolidateSaving}>Konsolidasiya Et</Button>
+                        <Button view="flat" onClick={() => setIsConsolidateModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleConsolidate} loading={consolidateSaving}>{t('packages.consolidateButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isReceivingModalOpen} onClose={() => setIsReceivingModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Anbarda Çəkini Təsdiqlə</Text>
-                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{receivingTarget?.trackingNumber}</strong></Text>
+                    <Text variant="header-1">{t('packages.receivingModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{t('packages.trackingNumberColon')} <strong>{receivingTarget?.trackingNumber}</strong></Text>
                     <Text variant="body-2" color="secondary">
-                        Müştərinin bəyan etdiyi çəki: <strong>{receivingTarget ? parseFloat(receivingTarget.weight).toFixed(2) : '0.00'} kq</strong>
+                        {t('packages.customerDeclaredWeightLabel')} <strong>{receivingTarget ? parseFloat(receivingTarget.weight).toFixed(2) : '0.00'} kq</strong>
                     </Text>
 
                     {receivingError && (
@@ -1129,25 +1143,25 @@ const Packages = () => {
                     )}
 
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Anbarda Ölçülən Real Çəki (kq) *</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.actualWeightAtWarehouseLabel')}</Text>
                         <TextInput type="number" min="0" step="0.01" value={receivingActualWeight} onChange={(e) => setReceivingActualWeight(e.target.value)} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Bağlamanın Şəkli (könüllü)</Text>
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('packages.photoLabel')}</Text>
                         <input type="file" accept="image/*" onChange={(e) => setReceivingPhotoFile(e.target.files[0] || null)} />
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                        <Button view="flat" onClick={() => setIsReceivingModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleConfirmReceiving} loading={receivingSaving}>Təsdiqlə</Button>
+                        <Button view="flat" onClick={() => setIsReceivingModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleConfirmReceiving} loading={receivingSaving}>{t('packages.confirmButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isStorageModalOpen} onClose={() => setIsStorageModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Anbar Saxlama Haqqı</Text>
-                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{storageTarget?.trackingNumber}</strong></Text>
+                    <Text variant="header-1">{t('packages.storageModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{t('packages.trackingNumberColon')} <strong>{storageTarget?.trackingNumber}</strong></Text>
 
                     {storageError && (
                         <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
@@ -1160,43 +1174,43 @@ const Packages = () => {
                     ) : storageFeeData && (
                         <>
                             <Text variant="body-2" color="secondary">
-                                Anbara çatma tarixi: <strong>{new Date(storageFeeData.arrivedAtBranchAt).toLocaleDateString('az-AZ')}</strong>
+                                {t('packages.arrivalDateLabel')} <strong>{new Date(storageFeeData.arrivedAtBranchAt).toLocaleDateString(locale)}</strong>
                             </Text>
                             <Text variant="body-2" color="secondary">
-                                Pulsuz saxlama müddəti: <strong>{storageFeeData.freeDays} gün</strong> · Günlük tarif: <strong>${parseFloat(storageFeeData.dailyRate).toFixed(2)}</strong>
+                                {t('packages.freeDaysLabel')} <strong>{storageFeeData.freeDays} {t('packages.daysUnit')}</strong> · {t('packages.dailyRateLabel')} <strong>${parseFloat(storageFeeData.dailyRate).toFixed(2)}</strong>
                             </Text>
                             <Text variant="body-2" color="secondary">
-                                Gecikmə: <strong>{storageFeeData.overdueDays} gün</strong> · Yaranmış haqq: <strong>${storageFeeData.totalAccrued.toFixed(2)}</strong>
+                                {t('packages.overdueLabel')} <strong>{storageFeeData.overdueDays} {t('packages.daysUnit')}</strong> · {t('packages.accruedFeeLabel')} <strong>${storageFeeData.totalAccrued.toFixed(2)}</strong>
                             </Text>
                             {storageFeeData.storageFeePaid > 0 && (
                                 <Text variant="body-2" color="secondary">
-                                    Ödənilmiş: <strong>${storageFeeData.storageFeePaid.toFixed(2)}</strong>
+                                    {t('packages.paidLabel')} <strong>${storageFeeData.storageFeePaid.toFixed(2)}</strong>
                                 </Text>
                             )}
                             <div style={{ padding: '12px 16px', borderRadius: '8px', backgroundColor: storageFeeData.outstanding > 0 ? '#3d1618' : '#13231b', border: `1px solid ${storageFeeData.outstanding > 0 ? '#f85149' : '#2ea043'}` }}>
                                 <Text variant="subheader-1" style={{ color: storageFeeData.outstanding > 0 ? '#ff7b72' : '#56d364' }}>
-                                    Ödəniləcək məbləğ: ${storageFeeData.outstanding.toFixed(2)}
+                                    {t('packages.amountDueLabel', { amount: storageFeeData.outstanding.toFixed(2) })}
                                 </Text>
                             </div>
 
                             {storageFeeData.outstanding > 0 && storageTarget?.userId === currentUser.id && (
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
-                                    <Button view="action" onClick={handlePayStorageFee} loading={storagePaying}>Balansdan Ödə</Button>
+                                    <Button view="action" onClick={handlePayStorageFee} loading={storagePaying}>{t('packages.payFromBalanceButton')}</Button>
                                 </div>
                             )}
                         </>
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                        <Button view="flat" onClick={() => setIsStorageModalOpen(false)}>Bağla</Button>
+                        <Button view="flat" onClick={() => setIsStorageModalOpen(false)}>{t('finance.closeButton')}</Button>
                     </div>
                 </div>
             </Modal>
 
             <Modal open={isDutyModalOpen} onClose={() => setIsDutyModalOpen(false)}>
                 <div style={{ padding: '24px', width: '400px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Gömrük Rüsumu</Text>
-                    <Text variant="body-2" color="secondary">Trek Nömrəsi: <strong>{dutyTarget?.trackingNumber}</strong></Text>
+                    <Text variant="header-1">{t('packages.dutyModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{t('packages.trackingNumberColon')} <strong>{dutyTarget?.trackingNumber}</strong></Text>
 
                     {dutyError && (
                         <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
@@ -1209,43 +1223,43 @@ const Packages = () => {
                     ) : dutyData && (
                         <>
                             <Text variant="body-2" color="secondary">
-                                Gömrük dəyəri: <strong>${dutyData.customsValue.toFixed(2)}</strong>
-                                {!dutyData.usedDeclaredValue && ' (hesablanmış qiymət əsasında)'}
+                                {t('packages.customsValueLabel')} <strong>${dutyData.customsValue.toFixed(2)}</strong>
+                                {!dutyData.usedDeclaredValue && t('packages.basedOnCalculatedPrice')}
                             </Text>
                             <Text variant="body-2" color="secondary">
-                                De minimis həddi: <strong>${dutyData.deMinimisThreshold.toFixed(2)}</strong>
+                                {t('packages.deMinimisLabel')} <strong>${dutyData.deMinimisThreshold.toFixed(2)}</strong>
                             </Text>
                             {dutyData.matchedCategory ? (
                                 <Text variant="body-2" color="secondary">
-                                    Kateqoriya: <strong>{dutyData.matchedCategory}</strong> · Rüsum faizi: <strong>{dutyData.dutyRatePercent.toFixed(2)}%</strong>
+                                    {t('packages.categoryLabel')} <strong>{dutyData.matchedCategory}</strong> · {t('packages.dutyRateLabel')} <strong>{dutyData.dutyRatePercent.toFixed(2)}%</strong>
                                 </Text>
                             ) : (
-                                <Text variant="body-2" color="secondary">Bağlama de minimis həddindən aşağı olduğu üçün rüsumdan azaddır.</Text>
+                                <Text variant="body-2" color="secondary">{t('packages.belowDeMinimis')}</Text>
                             )}
                             <Text variant="body-2" color="secondary">
-                                Hesablanmış rüsum: <strong>${dutyData.totalDuty.toFixed(2)}</strong>
+                                {t('packages.calculatedDutyLabel')} <strong>${dutyData.totalDuty.toFixed(2)}</strong>
                             </Text>
                             {dutyData.customsDutyPaid > 0 && (
                                 <Text variant="body-2" color="secondary">
-                                    Ödənilmiş: <strong>${dutyData.customsDutyPaid.toFixed(2)}</strong>
+                                    {t('packages.paidLabel')} <strong>${dutyData.customsDutyPaid.toFixed(2)}</strong>
                                 </Text>
                             )}
                             <div style={{ padding: '12px 16px', borderRadius: '8px', backgroundColor: dutyData.outstanding > 0 ? '#3d1618' : '#13231b', border: `1px solid ${dutyData.outstanding > 0 ? '#f85149' : '#2ea043'}` }}>
                                 <Text variant="subheader-1" style={{ color: dutyData.outstanding > 0 ? '#ff7b72' : '#56d364' }}>
-                                    Ödəniləcək məbləğ: ${dutyData.outstanding.toFixed(2)}
+                                    {t('packages.amountDueLabel', { amount: dutyData.outstanding.toFixed(2) })}
                                 </Text>
                             </div>
 
                             {dutyData.outstanding > 0 && dutyTarget?.userId === currentUser.id && (
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
-                                    <Button view="action" onClick={handlePayDuty} loading={dutyPaying}>Balansdan Ödə</Button>
+                                    <Button view="action" onClick={handlePayDuty} loading={dutyPaying}>{t('packages.payFromBalanceButton')}</Button>
                                 </div>
                             )}
                         </>
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                        <Button view="flat" onClick={() => setIsDutyModalOpen(false)}>Bağla</Button>
+                        <Button view="flat" onClick={() => setIsDutyModalOpen(false)}>{t('finance.closeButton')}</Button>
                     </div>
                 </div>
             </Modal>

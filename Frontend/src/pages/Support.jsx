@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Text, Button, TextInput, TextArea, Label, Loader, Modal, Select, Icon } from '@gravity-ui/uikit';
 import { Plus, ArrowLeft, Handset } from '@gravity-ui/icons';
 import api from '../services/api';
 
-const STATUS_THEME = { 'Açıq': 'info', 'İşlənir': 'warning', 'Bağlı': 'normal' };
-
 const Support = () => {
+    const { t, i18n } = useTranslation();
+    const STATUS_THEME = { 'Açıq': 'info', 'İşlənir': 'warning', 'Bağlı': 'normal' };
+    const STATUS_LABEL = { 'Açıq': t('support.statusOpen'), 'İşlənir': t('support.statusInProgress'), 'Bağlı': t('support.statusClosed') };
+    const locale = i18n.language === 'en' ? 'en-US' : 'az-AZ';
+
     const currentUser = JSON.parse(localStorage.getItem('user')) || {};
     const hasPermission = (key) => Boolean(currentUser.isSuperAdmin || currentUser.permissions?.includes(key));
     const canViewAll = hasPermission('support.viewAll');
@@ -64,7 +68,7 @@ const Support = () => {
             await openTicket(selectedTicketId);
             fetchTickets();
         } catch (err) {
-            alert(err.response?.data?.message || "Cavab göndərilərkən xəta baş verdi.");
+            alert(err.response?.data?.message || t('support.replyError'));
         } finally {
             setReplySending(false);
         }
@@ -76,14 +80,14 @@ const Support = () => {
             await openTicket(selectedTicketId);
             fetchTickets();
         } catch (err) {
-            alert(err.response?.data?.message || "Status dəyişdirilərkən xəta baş verdi.");
+            alert(err.response?.data?.message || t('support.statusChangeError'));
         }
     };
 
     const handleCreateTicket = async () => {
         setCreateError('');
         if (!newSubject.trim() || !newMessage.trim()) {
-            setCreateError('Mövzu və mesaj mütləqdir.');
+            setCreateError(t('support.subjectAndMessageRequired'));
             return;
         }
         setCreating(true);
@@ -94,19 +98,19 @@ const Support = () => {
             setNewMessage('');
             fetchTickets();
         } catch (err) {
-            setCreateError(err.response?.data?.message || 'Tiket yaradılarkən xəta baş verdi.');
+            setCreateError(err.response?.data?.message || t('support.createError'));
         } finally {
             setCreating(false);
         }
     };
 
-    const filteredTickets = tickets.filter((t) => statusFilter[0] === 'ALL' || t.status === statusFilter[0]);
+    const filteredTickets = tickets.filter((tk) => statusFilter[0] === 'ALL' || tk.status === statusFilter[0]);
 
     if (selectedTicketId) {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <Button view="flat" onClick={() => { setSelectedTicketId(null); setTicketDetail(null); }} style={{ alignSelf: 'flex-start' }}>
-                    <Icon data={ArrowLeft} /> Geri
+                    <Icon data={ArrowLeft} /> {t('auth.back')}
                 </Button>
 
                 {detailLoading || !ticketDetail ? (
@@ -125,13 +129,13 @@ const Support = () => {
                                     value={[ticketDetail.ticket.status]}
                                     onUpdate={(val) => handleStatusChange(val[0])}
                                     options={[
-                                        { value: 'Açıq', content: 'Açıq' },
-                                        { value: 'İşlənir', content: 'İşlənir' },
-                                        { value: 'Bağlı', content: 'Bağlı' }
+                                        { value: 'Açıq', content: t('support.statusOpen') },
+                                        { value: 'İşlənir', content: t('support.statusInProgress') },
+                                        { value: 'Bağlı', content: t('support.statusClosed') }
                                     ]}
                                 />
                             ) : (
-                                <Label theme={STATUS_THEME[ticketDetail.ticket.status] || 'normal'}>{ticketDetail.ticket.status}</Label>
+                                <Label theme={STATUS_THEME[ticketDetail.ticket.status] || 'normal'}>{STATUS_LABEL[ticketDetail.ticket.status] || ticketDetail.ticket.status}</Label>
                             )}
                         </div>
 
@@ -146,7 +150,7 @@ const Support = () => {
                                             border: `1px solid ${isStaff ? '#30363d' : '#8b5cf6'}`
                                         }}>
                                             <Text variant="caption-2" color="secondary" style={{ display: 'block', marginBottom: '4px' }}>
-                                                {m.firstName} {m.lastName} {isStaff && '(Dəstək)'} · {new Date(m.createdAt).toLocaleString('az-AZ', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                {m.firstName} {m.lastName} {isStaff && t('support.staffSuffix')} · {new Date(m.createdAt).toLocaleString(locale, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                             </Text>
                                             <Text variant="body-2" style={{ whiteSpace: 'pre-wrap' }}>{m.message}</Text>
                                         </div>
@@ -157,13 +161,13 @@ const Support = () => {
 
                         <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <TextArea
-                                placeholder="Cavabınızı yazın..."
+                                placeholder={t('support.replyPlaceholder')}
                                 value={replyText}
                                 onUpdate={(val) => setReplyText(val)}
                                 rows={3}
                             />
                             <Button view="action" onClick={handleReply} loading={replySending} style={{ alignSelf: 'flex-end' }}>
-                                Göndər
+                                {t('support.sendButton')}
                             </Button>
                         </Card>
                     </>
@@ -177,15 +181,15 @@ const Support = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <Text variant="header-2" className="gradient-text">
-                        {canViewAll ? 'Bütün Dəstək Tiketləri' : 'Dəstək Tiketlərim'}
+                        {canViewAll ? t('support.allTicketsTitle') : t('support.myTicketsTitle')}
                     </Text>
                     <Text variant="body-1" color="secondary" style={{ display: 'block', marginTop: '4px' }}>
-                        {canViewAll ? 'Müştərilərin dəstək müraciətlərini idarə edin.' : 'Suallarınızı və problemlərinizi dəstək komandamıza bildirin.'}
+                        {canViewAll ? t('support.allTicketsDesc') : t('support.myTicketsDesc')}
                     </Text>
                 </div>
                 {!canViewAll && (
                     <Button view="action" size="l" onClick={() => setIsCreateModalOpen(true)} className="pill-btn" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)', border: 'none' }}>
-                        <Icon data={Plus} /> Yeni Tiket
+                        <Icon data={Plus} /> {t('support.newTicketButton')}
                     </Button>
                 )}
             </div>
@@ -195,10 +199,10 @@ const Support = () => {
                     value={statusFilter}
                     onUpdate={(val) => setStatusFilter(val)}
                     options={[
-                        { value: 'ALL', content: 'Bütün Statuslar' },
-                        { value: 'Açıq', content: 'Açıq' },
-                        { value: 'İşlənir', content: 'İşlənir' },
-                        { value: 'Bağlı', content: 'Bağlı' }
+                        { value: 'ALL', content: t('support.allStatuses') },
+                        { value: 'Açıq', content: t('support.statusOpen') },
+                        { value: 'İşlənir', content: t('support.statusInProgress') },
+                        { value: 'Bağlı', content: t('support.statusClosed') }
                     ]}
                     width="max"
                 />
@@ -209,30 +213,30 @@ const Support = () => {
             ) : filteredTickets.length === 0 ? (
                 <Card style={{ padding: '40px', textAlign: 'center' }}>
                     <Icon data={Handset} size={32} style={{ color: '#8b949e', marginBottom: '8px' }} />
-                    <Text variant="subheader-1" color="secondary" style={{ display: 'block' }}>Tiket tapılmadı.</Text>
+                    <Text variant="subheader-1" color="secondary" style={{ display: 'block' }}>{t('support.noTicketsFound')}</Text>
                 </Card>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {filteredTickets.map((t) => (
+                    {filteredTickets.map((tk) => (
                         <Card
-                            key={t.id}
+                            key={tk.id}
                             type="action"
                             className="hover-lift"
                             style={{ padding: '16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}
-                            onClick={() => openTicket(t.id)}
+                            onClick={() => openTicket(tk.id)}
                         >
                             <div>
-                                <Text variant="subheader-2" style={{ color: '#ffffff' }}>{t.subject}</Text>
+                                <Text variant="subheader-2" style={{ color: '#ffffff' }}>{tk.subject}</Text>
                                 {canViewAll && (
                                     <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '2px' }}>
-                                        {t.firstName} {t.lastName} ({t.email})
+                                        {tk.firstName} {tk.lastName} ({tk.email})
                                     </Text>
                                 )}
                                 <Text variant="caption-2" color="secondary" style={{ display: 'block', marginTop: '2px' }}>
-                                    {t.messageCount} mesaj · {new Date(t.updatedAt).toLocaleString('az-AZ', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    {t('support.messageCountLabel', { count: tk.messageCount })} · {new Date(tk.updatedAt).toLocaleString(locale, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                 </Text>
                             </div>
-                            <Label theme={STATUS_THEME[t.status] || 'normal'}>{t.status}</Label>
+                            <Label theme={STATUS_THEME[tk.status] || 'normal'}>{STATUS_LABEL[tk.status] || tk.status}</Label>
                         </Card>
                     ))}
                 </div>
@@ -240,23 +244,23 @@ const Support = () => {
 
             <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)}>
                 <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <Text variant="header-1">Yeni Dəstək Tiketi</Text>
+                    <Text variant="header-1">{t('support.newTicketModalTitle')}</Text>
                     {createError && (
                         <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
                             {createError}
                         </div>
                     )}
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mövzu *</Text>
-                        <TextInput placeholder="Məs: Bağlamam gecikir" value={newSubject} onChange={(e) => setNewSubject(e.target.value)} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('support.subjectLabel')}</Text>
+                        <TextInput placeholder={t('support.subjectPlaceholder')} value={newSubject} onChange={(e) => setNewSubject(e.target.value)} />
                     </div>
                     <div>
-                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>Mesaj *</Text>
-                        <TextArea placeholder="Probleminizi ətraflı izah edin..." value={newMessage} onUpdate={(val) => setNewMessage(val)} rows={5} />
+                        <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('support.messageLabel')}</Text>
+                        <TextArea placeholder={t('support.messagePlaceholder')} value={newMessage} onUpdate={(val) => setNewMessage(val)} rows={5} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
-                        <Button view="flat" onClick={() => setIsCreateModalOpen(false)}>Ləğv et</Button>
-                        <Button view="action" onClick={handleCreateTicket} loading={creating}>Göndər</Button>
+                        <Button view="flat" onClick={() => setIsCreateModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleCreateTicket} loading={creating}>{t('support.sendButton')}</Button>
                     </div>
                 </div>
             </Modal>
