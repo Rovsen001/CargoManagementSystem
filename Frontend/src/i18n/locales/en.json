@@ -489,5 +489,39 @@
     "assignWarehouseLabel": "Warehouse",
     "assignConfirmButton": "Confirm & Create Package",
     "assignSuccess": "Package assigned to customer"
+  },
+  "localHub": {
+    "pageTitle": "Local Hub / Branch Panel",
+    "pageSubtitle": "Assign packages to shelves and hand them over to customers.",
+    "shelvingTab": "Shelving",
+    "dispatchTab": "Customer Dispatch (POS)",
+
+    "scanPackagePlaceholder": "Scan the package's tracking number...",
+    "packageFoundLabel": "Package:",
+    "notFoundOrNotAtBranch": "Package not found or not in \"At Branch\" status.",
+    "shelfLocationLabel": "Shelf Location (Zone-Shelf-Bay)",
+    "shelfLocationPlaceholder": "E.g.: A-04-12",
+    "assignShelfButton": "Assign to Shelf",
+    "shelfAssignedSuccess": "Shelf location assigned",
+    "currentShelfLabel": "Current shelf location:",
+    "occupancyTitle": "Shelf Occupancy",
+    "occupancyEmpty": "No packages have been shelved yet.",
+    "zoneLabel": "Zone",
+    "packagesCountLabel": "{{count}} packages",
+    "scanAnotherButton": "Scan Next Package",
+
+    "pendingPickupTitle": "Ready for Pickup",
+    "noPendingPickup": "This customer has no packages ready for pickup.",
+    "selectAllLabel": "Select all",
+    "sendOtpButton": "Send Verification Code",
+    "otpSentMessage": "The code was sent to the customer's notifications. Ask them for it.",
+    "otpCodeLabel": "Verification Code",
+    "otpCodePlaceholder": "Enter the 6-digit code",
+    "confirmDispatchButton": "Release to Customer",
+    "dispatchSuccessMessage": "Packages successfully released",
+    "selectPackagesError": "Select at least one package",
+    "otpRequiredError": "Enter the verification code",
+    "resendOtpButton": "Resend Code",
+    "noShelfLocation": "Not assigned"
   }
 }

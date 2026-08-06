@@ -3381,6 +3381,171 @@ app.post('/api/unidentified-parcels/:id/assign', verifyToken, requirePermission(
 });
 
 // ==========================================
+// 🏢 YERLİ HUB / FİLİAL PANELİ (ŞKAF TƏYİNATI + POS TƏHVİL)
+// ==========================================
+
+// 1. Bağlamanı şkaf yerinə bağla (yalnız "Filialda" statusunda olan bağlamalar üçün)
+app.put('/api/packages/:id/shelf-location', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    const shelfLocation = (req.body.shelfLocation || '').trim();
+
+    if (!shelfLocation) {
+        return res.status(400).json({ message: "Şkaf yeri qeyd edilməlidir" });
+    }
+
+    try {
+        const existing = await pool.request().input('id', sql.Int, id).query('SELECT status, trackingNumber FROM Packages WHERE id = @id');
+        if (existing.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        if (existing.recordset[0].status !== 'Filialda') {
+            return res.status(400).json({ message: `Yalnız "Filialda" statusunda olan bağlamalar şkafa yerləşdirilə bilər (cari status: ${existing.recordset[0].status})` });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('shelfLocation', sql.NVarChar, shelfLocation)
+            .query('UPDATE Packages SET shelfLocation = @shelfLocation WHERE id = @id');
+
+        await logAudit(req, 'package.assignShelf', 'Package', id, { trackingNumber: existing.recordset[0].trackingNumber, shelfLocation });
+        res.json({ message: "Şkaf yeri təyin edildi", shelfLocation });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Şkaf xəritəsi (vizual 2D grid üçün — hazırda şkafda olan bütün bağlamalar)
+app.get('/api/shelf-map', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT p.id, p.trackingNumber, p.shelfLocation, p.userId, u.firstName, u.lastName
+            FROM Packages p
+            LEFT JOIN Users u ON u.id = p.userId
+            WHERE p.shelfLocation IS NOT NULL AND p.status = N'Filialda' AND p.isDeleted = 0
+            ORDER BY p.shelfLocation ASC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Müştərinin təhvilə hazır bağlamaları (POS axtarışı üçün)
+app.get('/api/customers/:id/pending-pickup', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.request()
+            .input('userId', sql.Int, id)
+            .query(`
+                SELECT id, trackingNumber, weight, price, shelfLocation, status
+                FROM Packages
+                WHERE userId = @userId AND status = N'Filialda' AND isDeleted = 0
+                ORDER BY id DESC
+            `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Təhvilalma kodu göndər (zero-trust: kod yalnız müştərinin öz bildiriş panelində görünür)
+app.post('/api/customers/:id/dispatch-otp', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const userCheck = await pool.request().input('id', sql.Int, id).query(`SELECT id FROM Users WHERE id = @id AND role = N'Customer'`);
+        if (userCheck.recordset.length === 0) {
+            return res.status(404).json({ message: "Müştəri tapılmadı" });
+        }
+
+        const code = String(crypto.randomInt(100000, 1000000));
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('code', sql.NVarChar, code)
+            .query(`UPDATE Users SET dispatchOtpCode = @code, dispatchOtpExpiresAt = DATEADD(minute, 5, GETDATE()) WHERE id = @id`);
+
+        await createInAppNotification(
+            id,
+            'Təhvilalma Təsdiq Kodu',
+            `Filialdan bağlamalarınızı təhvil almaq üçün bu kodu filial əməkdaşına deyin: ${code}. Kod 5 dəqiqə etibarlıdır.`,
+            'general'
+        );
+
+        await logAudit(req, 'customer.dispatchOtpSent', 'User', id, {});
+        res.json({ message: "Təsdiq kodu müştəriyə göndərildi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Təhvilalma kodunu təsdiqlə və seçilmiş bağlamaları təhvil ver
+app.post('/api/customers/:id/dispatch-confirm', verifyToken, requirePermission('packages.editAll'), async (req, res) => {
+    const { id } = req.params;
+    const code = (req.body.code || '').trim();
+    const packageIds = Array.isArray(req.body.packageIds) ? req.body.packageIds.map((p) => parseInt(p)).filter((p) => !isNaN(p)) : [];
+
+    if (!code) {
+        return res.status(400).json({ message: "Təsdiq kodu daxil edilməlidir" });
+    }
+    if (packageIds.length === 0) {
+        return res.status(400).json({ message: "Ən azı bir bağlama seçilməlidir" });
+    }
+
+    try {
+        const userResult = await pool.request().input('id', sql.Int, id).query(`SELECT dispatchOtpCode, dispatchOtpExpiresAt FROM Users WHERE id = @id`);
+        if (userResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Müştəri tapılmadı" });
+        }
+        const { dispatchOtpCode, dispatchOtpExpiresAt } = userResult.recordset[0];
+
+        if (!dispatchOtpCode || dispatchOtpCode !== code) {
+            return res.status(400).json({ message: "Təsdiq kodu yanlışdır" });
+        }
+        if (!dispatchOtpExpiresAt || new Date(dispatchOtpExpiresAt) < new Date()) {
+            return res.status(400).json({ message: "Təsdiq kodunun müddəti bitib, yenidən göndərin" });
+        }
+
+        const packagesResult = await pool.request()
+            .input('userId', sql.Int, id)
+            .query(`SELECT id, trackingNumber, status FROM Packages WHERE userId = @userId AND status = N'Filialda' AND isDeleted = 0`);
+        const eligibleIds = new Set(packagesResult.recordset.map((p) => p.id));
+        const invalidIds = packageIds.filter((pid) => !eligibleIds.has(pid));
+        if (invalidIds.length > 0) {
+            return res.status(400).json({ message: "Seçilmiş bağlamalardan bəziləri təhvilə hazır deyil" });
+        }
+
+        const releasedTrackingNumbers = [];
+        for (const pid of packageIds) {
+            const pkg = packagesResult.recordset.find((p) => p.id === pid);
+            await pool.request()
+                .input('id', sql.Int, pid)
+                .query(`UPDATE Packages SET status = N'Təhvil verildi', deliveredAt = CASE WHEN deliveredAt IS NULL THEN GETDATE() ELSE deliveredAt END WHERE id = @id`);
+            await pool.request()
+                .input('packageId', sql.Int, pid)
+                .input('status', sql.NVarChar, 'Təhvil verildi')
+                .input('changedByUserId', sql.Int, req.user.id)
+                .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+            releasedTrackingNumbers.push(pkg.trackingNumber);
+        }
+
+        await pool.request().input('id', sql.Int, id).query(`UPDATE Users SET dispatchOtpCode = NULL, dispatchOtpExpiresAt = NULL WHERE id = @id`);
+
+        await createInAppNotification(
+            id,
+            'Bağlamalarınız təhvil verildi',
+            `Aşağıdakı bağlamalar sizə təhvil verildi: ${releasedTrackingNumbers.join(', ')}.`,
+            'general'
+        );
+
+        await logAudit(req, 'customer.dispatchConfirmed', 'User', id, { packageIds, trackingNumbers: releasedTrackingNumbers });
+
+        res.json({ message: "Bağlamalar uğurla təhvil verildi", trackingNumbers: releasedTrackingNumbers });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
 // 🚀 SERVERİ BAŞLATMAQ
 // ==========================================
 const PORT = process.env.PORT || 5000;

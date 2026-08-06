@@ -20,6 +20,7 @@ import ProhibitedTerms from './pages/ProhibitedTerms';
 import StorageSettings from './pages/StorageSettings';
 import CustomsDuty from './pages/CustomsDuty';
 import WarehouseOperator from './pages/WarehouseOperator';
+import LocalHub from './pages/LocalHub';
 import Claims from './pages/Claims';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
@@ -380,6 +381,15 @@ function App() {
                                     Xarici Anbar Operatoru
                                 </Button>
                             )}
+                            {hasPermission('packages.editAll') && (
+                                <Button
+                                    view={activePage === 'local-hub' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('local-hub')}
+                                >
+                                    Yerli HUB / Filial
+                                </Button>
+                            )}
                             {isSuperAdminUser && (
                                 <Button
                                     view={activePage === 'roles' ? 'action' : 'flat-secondary'}
@@ -492,6 +502,11 @@ function App() {
                                 )}
                                 {activePage === 'warehouse-operator' && (
                                     hasPermission('packages.editAll') ? <WarehouseOperator /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'local-hub' && (
+                                    hasPermission('packages.editAll') ? <LocalHub /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}

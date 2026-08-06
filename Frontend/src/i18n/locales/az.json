@@ -489,5 +489,39 @@
     "assignWarehouseLabel": "Anbar",
     "assignConfirmButton": "Təsdiqlə və Bağlama Yarat",
     "assignSuccess": "Bağlama müştəriyə təyin edildi"
+  },
+  "localHub": {
+    "pageTitle": "Yerli HUB / Filial Paneli",
+    "pageSubtitle": "Bağlamaları şkaflara yerləşdirin və müştərilərə təhvil verin.",
+    "shelvingTab": "Şkaf Təyinatı",
+    "dispatchTab": "Müştəri Təhvili (POS)",
+
+    "scanPackagePlaceholder": "Bağlamanın trek nömrəsini skan edin...",
+    "packageFoundLabel": "Bağlama:",
+    "notFoundOrNotAtBranch": "Bağlama tapılmadı və ya \"Filialda\" statusunda deyil.",
+    "shelfLocationLabel": "Şkaf Yeri (Zona-Şkaf-Bölmə)",
+    "shelfLocationPlaceholder": "Məs: A-04-12",
+    "assignShelfButton": "Şkafa Yerləşdir",
+    "shelfAssignedSuccess": "Şkaf yeri təyin edildi",
+    "currentShelfLabel": "Cari şkaf yeri:",
+    "occupancyTitle": "Şkaf Doluluğu",
+    "occupancyEmpty": "Hələ heç bir bağlama şkafa yerləşdirilməyib.",
+    "zoneLabel": "Zona",
+    "packagesCountLabel": "{{count}} bağlama",
+    "scanAnotherButton": "Növbəti Bağlamanı Skan Et",
+
+    "pendingPickupTitle": "Təhvilə Hazır Bağlamalar",
+    "noPendingPickup": "Bu müştərinin təhvilə hazır bağlaması yoxdur.",
+    "selectAllLabel": "Hamısını seç",
+    "sendOtpButton": "Təsdiq Kodu Göndər",
+    "otpSentMessage": "Kod müştərinin bildiriş panelinə göndərildi. Kodu ondan soruşun.",
+    "otpCodeLabel": "Təsdiq Kodu",
+    "otpCodePlaceholder": "6 rəqəmli kodu daxil edin",
+    "confirmDispatchButton": "Təhvil Ver",
+    "dispatchSuccessMessage": "Bağlamalar uğurla təhvil verildi",
+    "selectPackagesError": "Ən azı bir bağlama seçin",
+    "otpRequiredError": "Təsdiq kodunu daxil edin",
+    "resendOtpButton": "Kodu Yenidən Göndər",
+    "noShelfLocation": "Təyin edilməyib"
   }
 }
