@@ -523,5 +523,32 @@
     "otpRequiredError": "Enter the verification code",
     "resendOtpButton": "Resend Code",
     "noShelfLocation": "Not assigned"
+  },
+  "courierDispatch": {
+    "pageTitle": "Courier Dispatch Center",
+    "pageSubtitle": "Monitor courier workload and batch-assign packages.",
+    "workloadTitle": "Courier Workload",
+    "activeDeliveriesLabel": "Active",
+    "deliveredLabel": "Delivered",
+    "awaitingTitle": "Unassigned Packages (At Branch)",
+    "noAwaiting": "No packages currently awaiting courier assignment.",
+    "assignToCourierLabel": "Select courier",
+    "batchAssignButton": "Assign Selected",
+    "batchAssignSuccess": "{{count}} packages assigned to courier",
+    "selectCourierError": "Select a courier",
+
+    "deliveryProofModalTitle": "Delivery Proof",
+    "proofTypeSignature": "Digital Signature",
+    "proofTypePhoto": "Photo Proof",
+    "proofTypeOtp": "Verification Code",
+    "signatureInstructions": "Ask the customer to sign in the field below",
+    "clearSignatureButton": "Clear",
+    "photoInstructions": "Take a photo of the package at handover",
+    "sendDeliveryOtpButton": "Send Verification Code",
+    "deliveryOtpSentMessage": "The code was sent to the customer's notifications. Ask them for it.",
+    "deliverButton": "Confirm Delivery",
+    "deliverySuccessMessage": "Package successfully delivered",
+    "signatureRequiredError": "Signature is required",
+    "photoRequiredError": "Photo is required"
   }
 }

@@ -21,6 +21,7 @@ import StorageSettings from './pages/StorageSettings';
 import CustomsDuty from './pages/CustomsDuty';
 import WarehouseOperator from './pages/WarehouseOperator';
 import LocalHub from './pages/LocalHub';
+import CourierDispatch from './pages/CourierDispatch';
 import Claims from './pages/Claims';
 import Support from './pages/Support';
 import FinancePage from './pages/FinancePage';
@@ -390,6 +391,15 @@ function App() {
                                     Yerli HUB / Filial
                                 </Button>
                             )}
+                            {hasPermission('packages.assignCourier') && (
+                                <Button
+                                    view={activePage === 'courier-dispatch' ? 'action' : 'flat-secondary'}
+                                    width="max" size="l" style={{ justifyContent: 'flex-start' }}
+                                    onClick={() => setActivePage('courier-dispatch')}
+                                >
+                                    Kuryer Dispatch
+                                </Button>
+                            )}
                             {isSuperAdminUser && (
                                 <Button
                                     view={activePage === 'roles' ? 'action' : 'flat-secondary'}
@@ -507,6 +517,11 @@ function App() {
                                 )}
                                 {activePage === 'local-hub' && (
                                     hasPermission('packages.editAll') ? <LocalHub /> : (
+                                        <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
+                                    )
+                                )}
+                                {activePage === 'courier-dispatch' && (
+                                    hasPermission('packages.assignCourier') ? <CourierDispatch /> : (
                                         <Text color="danger" variant="header-1">Bu səhifəyə giriş icazəniz yoxdur.</Text>
                                     )
                                 )}

@@ -67,6 +67,23 @@ const unidentifiedUpload = multer({
     }
 });
 
+// Təhvil sübutu (imza/foto) üçün şəkillərin yüklənməsi
+const deliveryProofUploadsDir = path.join(__dirname, 'uploads', 'delivery-proof');
+fs.mkdirSync(deliveryProofUploadsDir, { recursive: true });
+const deliveryProofUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, deliveryProofUploadsDir),
+        filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`)
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Yalnız şəkil faylları qəbul edilir'));
+        }
+        cb(null, true);
+    }
+});
+
 // Stripe yalnız .env-də STRIPE_SECRET_KEY qeyd olunubsa aktivləşir (real satıcı açarları tələb olunur)
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
@@ -3540,6 +3557,211 @@ app.post('/api/customers/:id/dispatch-confirm', verifyToken, requirePermission('
         await logAudit(req, 'customer.dispatchConfirmed', 'User', id, { packageIds, trackingNumbers: releasedTrackingNumbers });
 
         res.json({ message: "Bağlamalar uğurla təhvil verildi", trackingNumbers: releasedTrackingNumbers });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
+// 🚚 SON-KİLOMETR KURYER DISPATCH MƏRKƏZİ
+// ==========================================
+
+// 1. Kuryer İş Yükü (Dispatcher Command Center)
+app.get('/api/couriers/workload', verifyToken, requirePermission('packages.assignCourier'), async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT u.id, u.firstName, u.lastName, u.email,
+                SUM(CASE WHEN p.id IS NOT NULL AND p.status != N'Təhvil verildi' AND p.isDeleted = 0 THEN 1 ELSE 0 END) as activeCount,
+                SUM(CASE WHEN p.id IS NOT NULL AND p.status = N'Təhvil verildi' THEN 1 ELSE 0 END) as deliveredCount
+            FROM Users u
+            JOIN Roles r ON r.name = u.role
+            JOIN RolePermissions rp ON rp.roleId = r.id
+            JOIN Permissions perm ON perm.id = rp.permissionId
+            LEFT JOIN Packages p ON p.assignedCourierId = u.id
+            WHERE perm.[key] = 'packages.viewAssigned'
+            GROUP BY u.id, u.firstName, u.lastName, u.email
+            ORDER BY u.firstName
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 2. Kuryerə təyin edilməmiş, "Filialda" statusunda olan bağlamalar
+app.get('/api/packages/awaiting-courier', verifyToken, requirePermission('packages.assignCourier'), async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT p.id, p.trackingNumber, p.weight, p.shelfLocation, u.firstName, u.lastName, u.email
+            FROM Packages p
+            LEFT JOIN Users u ON u.id = p.userId
+            WHERE p.status = N'Filialda' AND p.assignedCourierId IS NULL AND p.isDeleted = 0
+            ORDER BY p.id DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 3. Toplu kuryer təyinatı (bir neçə bağlamanı eyni kuryerə birdəfəyə təyin etmək)
+app.post('/api/packages/batch-assign-courier', verifyToken, requirePermission('packages.assignCourier'), async (req, res) => {
+    const packageIds = Array.isArray(req.body.packageIds) ? req.body.packageIds.map((p) => parseInt(p)).filter((p) => !isNaN(p)) : [];
+    const courierId = parseInt(req.body.courierId);
+
+    if (packageIds.length === 0) {
+        return res.status(400).json({ message: "Ən azı bir bağlama seçilməlidir" });
+    }
+    if (isNaN(courierId)) {
+        return res.status(400).json({ message: "Kuryer seçilməlidir" });
+    }
+
+    try {
+        const courierCheck = await pool.request()
+            .input('courierId', sql.Int, courierId)
+            .query(`
+                SELECT u.id FROM Users u
+                JOIN Roles r ON r.name = u.role
+                JOIN RolePermissions rp ON rp.roleId = r.id
+                JOIN Permissions p ON p.id = rp.permissionId
+                WHERE p.[key] = 'packages.viewAssigned' AND u.id = @courierId
+            `);
+        if (courierCheck.recordset.length === 0) {
+            return res.status(400).json({ message: "Seçilmiş istifadəçi kuryer deyil" });
+        }
+
+        const idList = packageIds.map((_, i) => `@id${i}`).join(',');
+        const request = pool.request().input('courierId', sql.Int, courierId);
+        packageIds.forEach((id, i) => request.input(`id${i}`, sql.Int, id));
+        const result = await request.query(`
+            UPDATE Packages SET assignedCourierId = @courierId
+            WHERE id IN (${idList}) AND status = N'Filialda' AND isDeleted = 0
+        `);
+
+        await logAudit(req, 'package.batchAssignCourier', 'Package', null, { packageIds, courierId, count: result.rowsAffected[0] });
+        res.json({ message: "Bağlamalar kuryerə təyin edildi", assignedCount: result.rowsAffected[0] });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 4. Kuryer təhvil zamanı müştəriyə təsdiq kodu göndərir (yalnız özünə təyin olunmuş bağlama üçün)
+app.post('/api/packages/:id/request-delivery-otp', verifyToken, requirePermission('packages.viewAssigned'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pkgResult = await pool.request().input('id', sql.Int, id).query('SELECT userId, assignedCourierId, trackingNumber FROM Packages WHERE id = @id');
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+        if (pkg.assignedCourierId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlama sizə təyin edilməyib" });
+        }
+
+        const code = String(crypto.randomInt(100000, 1000000));
+        await pool.request()
+            .input('id', sql.Int, pkg.userId)
+            .input('code', sql.NVarChar, code)
+            .query(`UPDATE Users SET dispatchOtpCode = @code, dispatchOtpExpiresAt = DATEADD(minute, 5, GETDATE()) WHERE id = @id`);
+
+        await createInAppNotification(
+            pkg.userId,
+            'Təhvilalma Təsdiq Kodu',
+            `Kuryer "${pkg.trackingNumber}" bağlamasını sizə təhvil vermək istəyir. Bu kodu kuryerə deyin: ${code}. Kod 5 dəqiqə etibarlıdır.`,
+            'general'
+        );
+
+        await logAudit(req, 'customer.dispatchOtpSent', 'User', pkg.userId, { trackingNumber: pkg.trackingNumber, viaCourier: true });
+        res.json({ message: "Təsdiq kodu müştəriyə göndərildi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// 5. Kuryerin təhvil sübutu ilə bağlamanı təhvil verməsi (imza / foto / OTP)
+app.put('/api/packages/:id/deliver', verifyToken, requirePermission('packages.viewAssigned'), deliveryProofUpload.single('photo'), async (req, res) => {
+    const { id } = req.params;
+    const proofType = (req.body.proofType || '').trim();
+    const otpCode = (req.body.otpCode || '').trim();
+
+    if (!['signature', 'photo', 'otp'].includes(proofType)) {
+        return res.status(400).json({ message: "Düzgün təhvil sübutu növü seçin" });
+    }
+
+    try {
+        const pkgResult = await pool.request().input('id', sql.Int, id).query('SELECT status, userId, assignedCourierId, trackingNumber, weightConfirmed FROM Packages WHERE id = @id');
+        if (pkgResult.recordset.length === 0) {
+            return res.status(404).json({ message: "Bağlama tapılmadı" });
+        }
+        const pkg = pkgResult.recordset[0];
+        if (pkg.assignedCourierId !== req.user.id) {
+            return res.status(403).json({ message: "Bu bağlama sizə təyin edilməyib" });
+        }
+
+        const { isSuperAdmin: isCourierSuperAdmin } = await getRoleInfo(req.user.role);
+        const transitionCheck = validateStatusTransition(pkg.status, 'Təhvil verildi', {
+            isSuperAdmin: isCourierSuperAdmin,
+            weightConfirmed: pkg.weightConfirmed
+        });
+        if (!transitionCheck.valid) {
+            return res.status(400).json({ message: transitionCheck.message });
+        }
+
+        let deliveryProofUrl = null;
+        let deliveryProofNote = null;
+
+        if (proofType === 'signature' || proofType === 'photo') {
+            if (!req.file) {
+                return res.status(400).json({ message: proofType === 'signature' ? "İmza tələb olunur" : "Şəkil tələb olunur" });
+            }
+            deliveryProofUrl = `/uploads/delivery-proof/${req.file.filename}`;
+        } else if (proofType === 'otp') {
+            if (!otpCode) {
+                return res.status(400).json({ message: "Təsdiq kodu daxil edilməlidir" });
+            }
+            const userResult = await pool.request().input('userId', sql.Int, pkg.userId).query('SELECT dispatchOtpCode, dispatchOtpExpiresAt FROM Users WHERE id = @userId');
+            const { dispatchOtpCode, dispatchOtpExpiresAt } = userResult.recordset[0] || {};
+            if (!dispatchOtpCode || dispatchOtpCode !== otpCode) {
+                return res.status(400).json({ message: "Təsdiq kodu yanlışdır" });
+            }
+            if (!dispatchOtpExpiresAt || new Date(dispatchOtpExpiresAt) < new Date()) {
+                return res.status(400).json({ message: "Təsdiq kodunun müddəti bitib, yenidən göndərin" });
+            }
+            await pool.request().input('userId', sql.Int, pkg.userId).query(`UPDATE Users SET dispatchOtpCode = NULL, dispatchOtpExpiresAt = NULL WHERE id = @userId`);
+            deliveryProofNote = 'OTP ilə təsdiqləndi';
+        }
+
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('proofType', sql.NVarChar, proofType)
+            .input('proofUrl', sql.NVarChar, deliveryProofUrl)
+            .input('proofNote', sql.NVarChar, deliveryProofNote)
+            .query(`
+                UPDATE Packages SET
+                    status = N'Təhvil verildi',
+                    deliveredAt = CASE WHEN deliveredAt IS NULL THEN GETDATE() ELSE deliveredAt END,
+                    deliveryProofType = @proofType,
+                    deliveryProofUrl = @proofUrl,
+                    deliveryProofNote = @proofNote
+                WHERE id = @id
+            `);
+
+        await pool.request()
+            .input('packageId', sql.Int, id)
+            .input('status', sql.NVarChar, 'Təhvil verildi')
+            .input('changedByUserId', sql.Int, req.user.id)
+            .query('INSERT INTO PackageStatusHistory (packageId, status, changedByUserId) VALUES (@packageId, @status, @changedByUserId)');
+
+        await createInAppNotification(
+            pkg.userId,
+            'Bağlamanız təhvil verildi',
+            `"${pkg.trackingNumber}" bağlaması sizə təhvil verildi.`,
+            'general'
+        );
+
+        await logAudit(req, 'package.deliverWithProof', 'Package', id, { trackingNumber: pkg.trackingNumber, proofType });
+
+        res.json({ message: "Bağlama uğurla təhvil verildi", proofType, deliveryProofUrl });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

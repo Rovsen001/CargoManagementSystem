@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Table,
@@ -32,7 +32,8 @@ import {
     WeightHanging,
     Wallet,
     Percent,
-    ArrowRight
+    ArrowRight,
+    Check
 } from '@gravity-ui/icons';
 import api from '../services/api';
 import BarcodeModal from '../components/Packages/BarcodeModal';
@@ -133,6 +134,20 @@ const Packages = () => {
     const [dutyLoading, setDutyLoading] = useState(false);
     const [dutyPaying, setDutyPaying] = useState(false);
     const [dutyError, setDutyError] = useState('');
+
+    const [isDeliveryProofModalOpen, setIsDeliveryProofModalOpen] = useState(false);
+    const [deliveryTarget, setDeliveryTarget] = useState(null);
+    const [proofType, setProofType] = useState('signature');
+    const [hasSignature, setHasSignature] = useState(false);
+    const [deliveryPhotoFile, setDeliveryPhotoFile] = useState(null);
+    const [deliveryPhotoPreview, setDeliveryPhotoPreview] = useState(null);
+    const [deliveryOtpCode, setDeliveryOtpCode] = useState('');
+    const [deliveryOtpSent, setDeliveryOtpSent] = useState(false);
+    const [deliveryOtpSending, setDeliveryOtpSending] = useState(false);
+    const [delivering, setDelivering] = useState(false);
+    const [deliveryError, setDeliveryError] = useState('');
+    const signatureCanvasRef = useRef(null);
+    const isDrawingRef = useRef(false);
 
     const openBarcodeModal = (item) => {
         setBarcodeTarget(item);
@@ -397,6 +412,118 @@ const Packages = () => {
         }
     };
 
+    const clearSignatureCanvas = () => {
+        const canvas = signatureCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0d1117';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        setHasSignature(false);
+    };
+
+    const openDeliveryProofModal = (item) => {
+        setDeliveryTarget(item);
+        setProofType('signature');
+        setHasSignature(false);
+        setDeliveryPhotoFile(null);
+        setDeliveryPhotoPreview(null);
+        setDeliveryOtpCode('');
+        setDeliveryOtpSent(false);
+        setDeliveryError('');
+        setIsDeliveryProofModalOpen(true);
+        setTimeout(() => clearSignatureCanvas(), 50);
+    };
+
+    const getCanvasPoint = (e) => {
+        const canvas = signatureCanvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+
+    const handleSignatureStart = (e) => {
+        e.preventDefault();
+        isDrawingRef.current = true;
+        const canvas = signatureCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = getCanvasPoint(e);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    };
+
+    const handleSignatureMove = (e) => {
+        if (!isDrawingRef.current) return;
+        e.preventDefault();
+        const canvas = signatureCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#f0f6fc';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        const { x, y } = getCanvasPoint(e);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        setHasSignature(true);
+    };
+
+    const handleSignatureEnd = () => {
+        isDrawingRef.current = false;
+    };
+
+    const handleDeliverySendOtp = async () => {
+        if (!deliveryTarget) return;
+        setDeliveryError('');
+        setDeliveryOtpSending(true);
+        try {
+            await api.post(`/packages/${deliveryTarget.id}/request-delivery-otp`);
+            setDeliveryOtpSent(true);
+        } catch (error) {
+            setDeliveryError(error.response?.data?.message || t('packages.paymentError'));
+        } finally {
+            setDeliveryOtpSending(false);
+        }
+    };
+
+    const handleConfirmDelivery = async () => {
+        if (!deliveryTarget) return;
+        setDeliveryError('');
+
+        if (proofType === 'signature' && !hasSignature) {
+            setDeliveryError(t('courierDispatch.signatureRequiredError'));
+            return;
+        }
+        if (proofType === 'photo' && !deliveryPhotoFile) {
+            setDeliveryError(t('courierDispatch.photoRequiredError'));
+            return;
+        }
+        if (proofType === 'otp' && !deliveryOtpCode.trim()) {
+            setDeliveryError(t('localHub.otpRequiredError'));
+            return;
+        }
+
+        setDelivering(true);
+        try {
+            const formData = new FormData();
+            formData.append('proofType', proofType);
+            if (proofType === 'signature') {
+                const canvas = signatureCanvasRef.current;
+                const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                formData.append('photo', new File([blob], `signature-${Date.now()}.png`, { type: 'image/png' }));
+            } else if (proofType === 'photo') {
+                formData.append('photo', deliveryPhotoFile);
+            } else if (proofType === 'otp') {
+                formData.append('otpCode', deliveryOtpCode.trim());
+            }
+            await api.put(`/packages/${deliveryTarget.id}/deliver`, formData);
+            setIsDeliveryProofModalOpen(false);
+            fetchPackages();
+        } catch (error) {
+            setDeliveryError(error.response?.data?.message || t('packages.paymentError'));
+        } finally {
+            setDelivering(false);
+        }
+    };
+
     const selectedWarehouseRate = (whId) => {
         const wh = warehouses.find(w => w.id === whId);
         return wh ? parseFloat(wh.ratePerKg) : 0;
@@ -614,12 +741,21 @@ const Packages = () => {
         if (!nextStatus) return null;
         if (!allowFinalStep && item.status === 'Filialda') return null;
         const gated = item.status === 'Bəyan edildi' && !item.weightConfirmed;
+        const isFinalCourierStep = allowFinalStep && nextStatus === 'Təhvil verildi';
         return (
             <Button
                 view="outlined"
                 size="s"
                 disabled={gated}
-                onClick={() => (allowFinalStep ? handleCourierStatusUpdate(item.id, nextStatus) : handleStatusChange(item.id, nextStatus, item))}
+                onClick={() => {
+                    if (isFinalCourierStep) {
+                        openDeliveryProofModal(item);
+                    } else if (allowFinalStep) {
+                        handleCourierStatusUpdate(item.id, nextStatus);
+                    } else {
+                        handleStatusChange(item.id, nextStatus, item);
+                    }
+                }}
                 title={gated ? t('packages.weightNotConfirmedGate') : t('packages.advanceButtonLabel', { status: statusLabel(nextStatus) })}
             >
                 <Icon data={ArrowRight} /> {statusLabel(nextStatus)}
@@ -1308,6 +1444,99 @@ const Packages = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
                         <Button view="flat" onClick={() => setIsDutyModalOpen(false)}>{t('finance.closeButton')}</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={isDeliveryProofModalOpen} onClose={() => setIsDeliveryProofModalOpen(false)}>
+                <div style={{ padding: '24px', width: '420px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <Text variant="header-1">{t('courierDispatch.deliveryProofModalTitle')}</Text>
+                    <Text variant="body-2" color="secondary">{deliveryTarget?.trackingNumber}</Text>
+
+                    <RadioButton
+                        size="m"
+                        value={proofType}
+                        onUpdate={(val) => { setProofType(val); setDeliveryError(''); }}
+                        options={[
+                            { value: 'signature', content: t('courierDispatch.proofTypeSignature') },
+                            { value: 'photo', content: t('courierDispatch.proofTypePhoto') },
+                            { value: 'otp', content: t('courierDispatch.proofTypeOtp') }
+                        ]}
+                    />
+
+                    {deliveryError && (
+                        <div style={{ padding: '10px', backgroundColor: '#3d1618', color: '#ff7b72', border: '1px solid #f85149', borderRadius: '6px', fontSize: '14px' }}>
+                            {deliveryError}
+                        </div>
+                    )}
+
+                    {proofType === 'signature' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <Text variant="caption-2" color="secondary">{t('courierDispatch.signatureInstructions')}</Text>
+                            <canvas
+                                ref={signatureCanvasRef}
+                                width={360}
+                                height={160}
+                                style={{ width: '100%', height: '160px', borderRadius: '8px', border: '1px solid #30363d', touchAction: 'none', cursor: 'crosshair' }}
+                                onMouseDown={handleSignatureStart}
+                                onMouseMove={handleSignatureMove}
+                                onMouseUp={handleSignatureEnd}
+                                onMouseLeave={handleSignatureEnd}
+                                onTouchStart={handleSignatureStart}
+                                onTouchMove={handleSignatureMove}
+                                onTouchEnd={handleSignatureEnd}
+                            />
+                            <Button view="flat" size="s" onClick={clearSignatureCanvas} style={{ alignSelf: 'flex-start' }}>
+                                {t('courierDispatch.clearSignatureButton')}
+                            </Button>
+                        </div>
+                    )}
+
+                    {proofType === 'photo' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <Text variant="caption-2" color="secondary">{t('courierDispatch.photoInstructions')}</Text>
+                            {deliveryPhotoPreview ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <img src={deliveryPhotoPreview} alt="" style={{ width: '96px', height: '96px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #30363d' }} />
+                                    <Button view="outlined" size="s" onClick={() => { setDeliveryPhotoFile(null); setDeliveryPhotoPreview(null); }}>
+                                        <Icon data={Xmark} />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <input type="file" accept="image/*" capture="environment" onChange={(e) => {
+                                    const f = e.target.files[0];
+                                    if (f) { setDeliveryPhotoFile(f); setDeliveryPhotoPreview(URL.createObjectURL(f)); }
+                                }} />
+                            )}
+                        </div>
+                    )}
+
+                    {proofType === 'otp' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {!deliveryOtpSent ? (
+                                <Button view="outlined" onClick={handleDeliverySendOtp} loading={deliveryOtpSending} style={{ alignSelf: 'flex-start' }}>
+                                    {t('courierDispatch.sendDeliveryOtpButton')}
+                                </Button>
+                            ) : (
+                                <>
+                                    <Text variant="caption-2" color="secondary">{t('courierDispatch.deliveryOtpSentMessage')}</Text>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <Text variant="body-2" style={{ marginBottom: '6px', display: 'block' }}>{t('localHub.otpCodeLabel')}</Text>
+                                            <TextInput placeholder={t('localHub.otpCodePlaceholder')} value={deliveryOtpCode} onChange={(e) => setDeliveryOtpCode(e.target.value)} />
+                                        </div>
+                                        <Button view="outlined" onClick={handleDeliverySendOtp} loading={deliveryOtpSending}>{t('localHub.resendOtpButton')}</Button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                        <Button view="flat" onClick={() => setIsDeliveryProofModalOpen(false)}>{t('support.cancelButton')}</Button>
+                        <Button view="action" onClick={handleConfirmDelivery} loading={delivering}>
+                            <Icon data={Check} /> {t('courierDispatch.deliverButton')}
+                        </Button>
                     </div>
                 </div>
             </Modal>

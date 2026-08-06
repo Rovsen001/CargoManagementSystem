@@ -523,5 +523,32 @@
     "otpRequiredError": "Təsdiq kodunu daxil edin",
     "resendOtpButton": "Kodu Yenidən Göndər",
     "noShelfLocation": "Təyin edilməyib"
+  },
+  "courierDispatch": {
+    "pageTitle": "Kuryer Dispatch Mərkəzi",
+    "pageSubtitle": "Kuryerlərin iş yükünü izləyin və bağlamaları toplu şəkildə təyin edin.",
+    "workloadTitle": "Kuryer İş Yükü",
+    "activeDeliveriesLabel": "Aktiv",
+    "deliveredLabel": "Təhvil verilib",
+    "awaitingTitle": "Kuryerə Təyin Edilməmiş Bağlamalar (Filialda)",
+    "noAwaiting": "Hazırda kuryerə təyin ediləcək bağlama yoxdur.",
+    "assignToCourierLabel": "Kuryer seçin",
+    "batchAssignButton": "Seçilənləri Təyin Et",
+    "batchAssignSuccess": "{{count}} bağlama kuryerə təyin edildi",
+    "selectCourierError": "Kuryer seçilməlidir",
+
+    "deliveryProofModalTitle": "Təhvil Sübutu",
+    "proofTypeSignature": "Rəqəmsal İmza",
+    "proofTypePhoto": "Foto Sübut",
+    "proofTypeOtp": "Təsdiq Kodu",
+    "signatureInstructions": "Müştəridən aşağıdakı sahədə imza atmasını xahiş edin",
+    "clearSignatureButton": "Təmizlə",
+    "photoInstructions": "Təhvil zamanı bağlamanın şəklini çəkin",
+    "sendDeliveryOtpButton": "Təsdiq Kodu Göndər",
+    "deliveryOtpSentMessage": "Kod müştərinin bildiriş panelinə göndərildi. Kodu ondan soruşun.",
+    "deliverButton": "Təhvil Ver",
+    "deliverySuccessMessage": "Bağlama uğurla təhvil verildi",
+    "signatureRequiredError": "İmza tələb olunur",
+    "photoRequiredError": "Şəkil tələb olunur"
   }
 }
