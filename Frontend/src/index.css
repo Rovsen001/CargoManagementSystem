@@ -103,3 +103,136 @@ input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
 }
+
+/* ==========================================
+   Responsiv Naviqasiya (Müştəri Navbar)
+   ========================================== */
+
+.navbar-header {
+    padding: 14px 40px;
+}
+
+.navbar-desktop-nav {
+    display: flex;
+}
+
+.navbar-hamburger-btn {
+    display: none !important;
+}
+
+.navbar-mobile-panel {
+    display: none;
+}
+
+.navbar-mobile-panel.navbar-mobile-panel-open {
+    display: flex;
+}
+
+@media (max-width: 960px) {
+    .navbar-header {
+        padding: 12px 16px;
+    }
+
+    .navbar-desktop-nav {
+        display: none;
+    }
+
+    .navbar-hamburger-btn {
+        display: inline-flex !important;
+    }
+
+    .navbar-balance-amount,
+    .navbar-user-text {
+        display: none !important;
+    }
+}
+
+@media (max-width: 560px) {
+    .navbar-brand-tagline {
+        display: none !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-header-user-text {
+        display: none !important;
+    }
+}
+
+/* ==========================================
+   Responsiv Footer
+   ========================================== */
+
+.footer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.footer-bottom-row {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .footer-root {
+        padding: 32px 20px 20px 20px !important;
+    }
+}
+
+/* ==========================================
+   Responsiv Admin/Staff Sidebar
+   ========================================== */
+
+.admin-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    transition: transform 0.25s ease;
+}
+
+.admin-sidebar-btn-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+    max-width: 100%;
+}
+
+.admin-sidebar-toggle-btn {
+    display: none !important;
+}
+
+.admin-sidebar-backdrop {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .admin-header {
+        padding: 12px 16px !important;
+    }
+
+    .admin-sidebar-toggle-btn {
+        display: inline-flex !important;
+    }
+
+    .admin-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 200;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+
+    .admin-sidebar.admin-sidebar-open {
+        transform: translateX(0);
+    }
+
+    .admin-sidebar-backdrop.admin-sidebar-backdrop-open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 199;
+    }
+}

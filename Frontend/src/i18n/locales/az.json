@@ -14,7 +14,8 @@
   },
   "lang": {
     "az": "Azərbaycan",
-    "en": "English"
+    "en": "English",
+    "ru": "Русский"
   },
   "hero": {
     "badge": "Sürətli & Etibarlı Kargo Xidməti",
@@ -219,7 +220,22 @@
     "cancelButton": "Ləğv et",
     "replyError": "Cavab göndərilərkən xəta baş verdi.",
     "statusChangeError": "Status dəyişdirilərkən xəta baş verdi.",
-    "createError": "Tiket yaradılarkən xəta baş verdi."
+    "createError": "Tiket yaradılarkən xəta baş verdi.",
+    "ai": {
+      "ticketsTabLabel": "Tiketlərim",
+      "chatTabLabel": "AI Köməkçi",
+      "welcomeMessage": "Salam! Mən CargoMS-in AI köməkçisiyəm. Çatdırılma, tariflər, gömrük qaydaları və ya platformadan istifadə haqqında sualınızı yaza bilərsiniz.",
+      "placeholder": "Sualınızı yazın...",
+      "thinking": "Yazır...",
+      "escalateButton": "Əməkdaşa Yönləndir",
+      "newChatButton": "Yeni Söhbət",
+      "unavailableMessage": "AI dəstək sistemi hazırda aktiv deyil. Zəhmət olmasa \"Tiketlərim\" bölməsindən adi dəstək tiketi açın.",
+      "sendError": "Mesaj göndərilərkən xəta baş verdi.",
+      "escalateError": "Söhbət yönləndirilərkən xəta baş verdi.",
+      "escalateEmptyError": "Yönləndirmək üçün əvvəlcə AI ilə söhbət edin.",
+      "escalateSuccess": "Söhbətiniz dəstək əməkdaşına yönləndirildi.",
+      "clearConfirm": "Söhbət tarixçəsi silinsin?"
+    }
   },
   "claims": {
     "allClaimsTitle": "Bütün Zədə/İtki İddiaları",

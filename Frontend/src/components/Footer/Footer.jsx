@@ -7,18 +7,16 @@ import { Box, ShieldCheck, Clock, Globe } from '@gravity-ui/icons';
 const Footer = ({ onNavigate }) => {
     const { t } = useTranslation();
     return (
-        <footer style={{
+        <footer className="footer-root" style={{
             backgroundColor: '#161b22',
             borderTop: '1px solid #30363d',
             padding: '48px 40px 24px 40px',
             marginTop: 'auto',
             color: '#8b949e'
         }}>
-            <div style={{
+            <div className="footer-grid" style={{
                 maxWidth: '1200px',
                 margin: '0 auto',
-                display: 'grid',
-                gridTemplateColumns: '2fr 1fr 1fr 1.5fr',
                 gap: '40px',
                 paddingBottom: '36px',
                 borderBottom: '1px solid #21262d'
@@ -82,7 +80,7 @@ const Footer = ({ onNavigate }) => {
             </div>
 
             {/* Bottom Copyright & Rights */}
-            <div style={{
+            <div className="footer-bottom-row" style={{
                 maxWidth: '1200px',
                 margin: '20px auto 0 auto',
                 display: 'flex',

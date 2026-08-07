@@ -2599,6 +2599,152 @@ app.put('/api/support/tickets/:id/status', verifyToken, requirePermission('suppo
 });
 
 // ==========================================
+// 🤖 AI DƏSTƏK KÖMƏKÇİSİ (AI SUPPORT CHATBOT)
+// ==========================================
+
+const AI_LANGUAGE_NAMES = { az: 'Azərbaycan', en: 'English', ru: 'Русский' };
+
+function buildAiSystemPrompt(lang) {
+    const languageName = AI_LANGUAGE_NAMES[lang] || AI_LANGUAGE_NAMES.az;
+    return `Sən CargoMS adlı beynəlxalq kargo və logistika şirkətinin müştəri dəstək süni intellekt köməkçisisən. CargoMS Türkiyə, ABŞ və Avropadan müştərilərin onlayn aldığı bağlamaları Azərbaycana çatdırır (xarici anbar → gömrük → yerli filial/HUB → kuryer və ya filialdan təhvil).
+
+Sənin vəzifən: müştərilərə göndərmə prosesi, tariflər, gömrük qaydaları, qadağan olunmuş mallar, bağlama izləmə, sığorta və platformanın necə işlədiyi haqqında ümumi suallara cavab vermək.
+
+Vacib qaydalar:
+- Sən müştərinin real bağlama, balans və ya sifariş məlumatlarına birbaşa çıxışın yoxdur — bu cür konkret sorğular üçün (məsələn "mənim bağlamam haradadır?") istifadəçini "Bağlamalarım" səhifəsindən izləməyə və ya lazım gələrsə real dəstək tiketinə yönləndirməyə səy göstər.
+- Heç vaxt uydurma qiymət, tarix və ya statuslar vermə.
+- Cavabların qısa, aydın və dostcasına olsun.
+- Əgər sual sənin bilik və ya səlahiyyət çərçivəndən kənardadırsa (məsələn hesabla bağlı konkret əməliyyat, şikayət, geri ödəmə), istifadəçiyə söhbəti real dəstək əməkdaşına yönləndirməyi təklif et.
+- Cavabını mütləq ${languageName} dilində ver.`;
+}
+
+app.get('/api/support/ai-chat', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('SELECT id, role, message, createdAt FROM AiChatMessages WHERE userId = @userId ORDER BY createdAt ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+app.post('/api/support/ai-chat', verifyToken, async (req, res) => {
+    const { message, lang } = req.body;
+
+    if (!message || !message.trim()) {
+        return res.status(400).json({ message: "Mesaj boş ola bilməz!" });
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({
+            message: "AI dəstək sistemi hazırda aktiv deyil. Zəhmət olmasa adi dəstək tiketi açın.",
+            aiUnavailable: true
+        });
+    }
+
+    try {
+        await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('role', sql.NVarChar, 'user')
+            .input('message', sql.NVarChar, message.trim())
+            .query('INSERT INTO AiChatMessages (userId, role, message) VALUES (@userId, @role, @message)');
+
+        const historyResult = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('SELECT TOP 20 role, message FROM AiChatMessages WHERE userId = @userId ORDER BY createdAt DESC');
+        const history = historyResult.recordset.reverse().map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.message
+        }));
+
+        const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+                max_tokens: 1024,
+                system: buildAiSystemPrompt(lang),
+                messages: history
+            })
+        });
+
+        if (!aiResponse.ok) {
+            const errText = await aiResponse.text();
+            console.error('Anthropic API xətası:', aiResponse.status, errText);
+            return res.status(502).json({ message: "AI cavabı alınarkən xəta baş verdi." });
+        }
+
+        const data = await aiResponse.json();
+        const replyText = (data.content && data.content[0] && data.content[0].text) || "Üzr istəyirəm, cavab yarada bilmədim.";
+
+        await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('role', sql.NVarChar, 'assistant')
+            .input('message', sql.NVarChar, replyText)
+            .query('INSERT INTO AiChatMessages (userId, role, message) VALUES (@userId, @role, @message)');
+
+        res.json({ reply: replyText });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+app.delete('/api/support/ai-chat', verifyToken, async (req, res) => {
+    try {
+        await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('DELETE FROM AiChatMessages WHERE userId = @userId');
+        res.json({ message: "Söhbət təmizləndi" });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+app.post('/api/support/ai-chat/escalate', verifyToken, async (req, res) => {
+    try {
+        const historyResult = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('SELECT role, message, createdAt FROM AiChatMessages WHERE userId = @userId ORDER BY createdAt ASC');
+
+        if (historyResult.recordset.length === 0) {
+            return res.status(400).json({ message: "Yönləndiriləcək söhbət tapılmadı." });
+        }
+
+        const transcript = historyResult.recordset
+            .map((m) => `${m.role === 'assistant' ? 'AI Köməkçi' : 'Müştəri'}: ${m.message}`)
+            .join('\n\n');
+
+        const subject = req.body.subject && req.body.subject.trim()
+            ? req.body.subject.trim()
+            : 'AI Söhbətindən Yönləndirilmiş Müraciət';
+
+        const insertResult = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('subject', sql.NVarChar, subject)
+            .query(`
+                INSERT INTO SupportTickets (userId, subject, status)
+                OUTPUT INSERTED.id
+                VALUES (@userId, @subject, N'Açıq')
+            `);
+        const ticketId = insertResult.recordset[0].id;
+
+        await pool.request()
+            .input('ticketId', sql.Int, ticketId)
+            .input('senderId', sql.Int, req.user.id)
+            .input('message', sql.NVarChar, `[AI söhbətindən köçürülüb]\n\n${transcript}`)
+            .query('INSERT INTO SupportTicketMessages (ticketId, senderId, message) VALUES (@ticketId, @senderId, @message)');
+
+        res.status(201).json({ message: "Söhbət dəstək tiketinə yönləndirildi", ticketId });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ==========================================
 // 🛡️ ZƏDƏ/İTKİ İDDİALARI (CLAIMS)
 // ==========================================
 

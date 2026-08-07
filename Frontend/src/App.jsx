@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider, Button, Text, Icon, Avatar, Label, Modal, TextInput, Card } from '@gravity-ui/uikit';
-import { Box, Gear } from '@gravity-ui/icons';
+import { Box, Gear, Bars, Xmark } from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import Navbar from './components/Navigation/Navbar';
 import NotificationBell from './components/Navigation/NotificationBell';
@@ -46,6 +46,9 @@ function App() {
     // Modals
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+    // Admin/Staff Sidebar Drawer (mobil/tablet üçün)
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Profile Change Password state
     const [oldPassword, setOldPassword] = useState('');
@@ -142,6 +145,10 @@ function App() {
         setActivePage('home');
     };
 
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [activePage]);
+
     const onLoginSuccess = (userData) => {
         setUser(userData);
         if (userData.balance !== undefined) {
@@ -232,7 +239,7 @@ function App() {
                     />
                 ) : (
                     /* IF ADMIN / STAFF: RENDER ADMINISTRATIVE BACKOFFICE HEADER */
-                    <header style={{
+                    <header className="admin-header" style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -243,17 +250,28 @@ function App() {
                         top: 0,
                         zIndex: 100
                     }}>
-                        <div
-                            onClick={() => setActivePage('home')}
-                            style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
-                        >
-                            <div style={{ backgroundColor: '#d97706', padding: '8px', borderRadius: '8px', display: 'flex' }}>
-                                <Icon data={Box} size={20} style={{ color: '#ffffff' }} />
-                            </div>
-                            <div>
-                                <Text variant="header-2" style={{ color: '#ffffff', fontSize: '18px', fontWeight: 'bold' }}>
-                                    CargoMS Admin & Staff Control
-                                </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            <Button
+                                className="admin-sidebar-toggle-btn"
+                                view="flat-secondary"
+                                size="l"
+                                style={{ padding: '0 8px' }}
+                                onClick={() => setSidebarOpen((o) => !o)}
+                            >
+                                <Icon data={sidebarOpen ? Xmark : Bars} size={20} />
+                            </Button>
+                            <div
+                                onClick={() => setActivePage('home')}
+                                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', minWidth: 0 }}
+                            >
+                                <div style={{ backgroundColor: '#d97706', padding: '8px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
+                                    <Icon data={Box} size={20} style={{ color: '#ffffff' }} />
+                                </div>
+                                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                    <Text variant="header-2" style={{ color: '#ffffff', fontSize: '18px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                                        CargoMS Admin & Staff Control
+                                    </Text>
+                                </div>
                             </div>
                         </div>
 
@@ -279,7 +297,7 @@ function App() {
                                     size="m"
                                     theme="warning"
                                 />
-                                <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '4px' }}>
+                                <div className="admin-header-user-text" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '4px' }}>
                                     <Text variant="body-2" style={{ fontWeight: 600, color: '#f0f6fc', lineHeight: 1.2 }}>
                                         {user.firstName ? `${user.firstName} ${user.lastName}` : user.fullName}
                                     </Text>
@@ -295,56 +313,61 @@ function App() {
 
                     {/* ADMIN / STAFF SIDEBAR (ONLY SHOWN FOR BACKOFFICE MANAGEMENT) */}
                     {isAdminOrStaff && (
-                        <aside style={{
-                            width: '240px',
-                            backgroundColor: '#161b22',
-                            borderRight: '1px solid #30363d',
-                            padding: '24px 16px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '12px'
-                        }}>
+                        <>
+                            <div
+                                className={`admin-sidebar-backdrop${sidebarOpen ? ' admin-sidebar-backdrop-open' : ''}`}
+                                onClick={() => setSidebarOpen(false)}
+                            />
+                            <aside className={`admin-sidebar${sidebarOpen ? ' admin-sidebar-open' : ''}`} style={{
+                                backgroundColor: '#161b22',
+                                borderRight: '1px solid #30363d',
+                                padding: '24px 16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px',
+                                overflowY: 'auto'
+                            }}>
                             <Button
                                 view={activePage === 'home' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('home')}
                             >
-                                Ana Səhifə
+                                <span className="admin-sidebar-btn-label" title="Ana Səhifə">Ana Səhifə</span>
                             </Button>
                             <Button
                                 view={activePage === 'dashboard' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('dashboard')}
                             >
-                                Dashboard
+                                <span className="admin-sidebar-btn-label" title="Dashboard">Dashboard</span>
                             </Button>
                             <Button
                                 view={activePage === 'packages' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('packages')}
                             >
-                                Bağlamalar
+                                <span className="admin-sidebar-btn-label" title="Bağlamalar">Bağlamalar</span>
                             </Button>
                             <Button
                                 view={activePage === 'finance' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('finance')}
                             >
-                                Maliyyə və Balans
+                                <span className="admin-sidebar-btn-label" title="Maliyyə və Balans">Maliyyə və Balans</span>
                             </Button>
                             <Button
                                 view={activePage === 'support' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('support')}
                             >
-                                Dəstək
+                                <span className="admin-sidebar-btn-label" title="Dəstək">Dəstək</span>
                             </Button>
                             <Button
                                 view={activePage === 'claims' ? 'action' : 'flat-secondary'}
                                 width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                 onClick={() => setActivePage('claims')}
                             >
-                                Zədə/İtki İddiaları
+                                <span className="admin-sidebar-btn-label" title="Zədə/İtki İddiaları">Zədə/İtki İddiaları</span>
                             </Button>
                             {hasPermission('users.view') && (
                                 <Button
@@ -352,7 +375,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('customers')}
                                 >
-                                    Müştərilər
+                                    <span className="admin-sidebar-btn-label" title="Müştərilər">Müştərilər</span>
                                 </Button>
                             )}
                             {hasPermission('reports.view') && (
@@ -361,7 +384,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('reports')}
                                 >
-                                    Hesabatlar
+                                    <span className="admin-sidebar-btn-label" title="Hesabatlar">Hesabatlar</span>
                                 </Button>
                             )}
                             {hasPermission('warehouses.manage') && (
@@ -370,7 +393,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('manage-warehouses')}
                                 >
-                                    Anbarlar
+                                    <span className="admin-sidebar-btn-label" title="Anbarlar">Anbarlar</span>
                                 </Button>
                             )}
                             {hasPermission('packages.editAll') && (
@@ -379,7 +402,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('warehouse-operator')}
                                 >
-                                    Xarici Anbar Operatoru
+                                    <span className="admin-sidebar-btn-label" title="Xarici Anbar Operatoru">Xarici Anbar Operatoru</span>
                                 </Button>
                             )}
                             {hasPermission('packages.editAll') && (
@@ -388,7 +411,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('local-hub')}
                                 >
-                                    Yerli HUB / Filial
+                                    <span className="admin-sidebar-btn-label" title="Yerli HUB / Filial">Yerli HUB / Filial</span>
                                 </Button>
                             )}
                             {hasPermission('packages.assignCourier') && (
@@ -397,7 +420,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('courier-dispatch')}
                                 >
-                                    Kuryer Dispatch
+                                    <span className="admin-sidebar-btn-label" title="Kuryer Dispatch">Kuryer Dispatch</span>
                                 </Button>
                             )}
                             {isSuperAdminUser && (
@@ -406,7 +429,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('roles')}
                                 >
-                                    Rollar
+                                    <span className="admin-sidebar-btn-label" title="Rollar">Rollar</span>
                                 </Button>
                             )}
                             {hasPermission('audit.view') && (
@@ -415,7 +438,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('audit-log')}
                                 >
-                                    Audit Qeydləri
+                                    <span className="admin-sidebar-btn-label" title="Audit Qeydləri">Audit Qeydləri</span>
                                 </Button>
                             )}
                             {isSuperAdminUser && (
@@ -424,7 +447,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('prohibited-terms')}
                                 >
-                                    Qadağan Olunmuş Mallar
+                                    <span className="admin-sidebar-btn-label" title="Qadağan Olunmuş Mallar">Qadağan Olunmuş Mallar</span>
                                 </Button>
                             )}
                             {isSuperAdminUser && (
@@ -433,7 +456,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('storage-settings')}
                                 >
-                                    Anbar Saxlama Tənzimləmələri
+                                    <span className="admin-sidebar-btn-label" title="Anbar Saxlama Tənzimləmələri">Anbar Saxlama Tənzimləmələri</span>
                                 </Button>
                             )}
                             {isSuperAdminUser && (
@@ -442,7 +465,7 @@ function App() {
                                     width="max" size="l" style={{ justifyContent: 'flex-start' }}
                                     onClick={() => setActivePage('customs-duty')}
                                 >
-                                    Gömrük Rüsumu
+                                    <span className="admin-sidebar-btn-label" title="Gömrük Rüsumu">Gömrük Rüsumu</span>
                                 </Button>
                             )}
 
@@ -453,10 +476,12 @@ function App() {
                                     style={{ justifyContent: 'flex-start' }}
                                     onClick={openProfile}
                                 >
-                                    <Icon data={Gear} style={{ marginRight: '8px' }} /> Profil Və Ayarlar
+                                    <Icon data={Gear} style={{ marginRight: '8px' }} />
+                                    <span className="admin-sidebar-btn-label" title="Profil Və Ayarlar">Profil Və Ayarlar</span>
                                 </Button>
                             </div>
-                        </aside>
+                            </aside>
+                        </>
                     )}
 
                     {/* CONTENT BODY */}

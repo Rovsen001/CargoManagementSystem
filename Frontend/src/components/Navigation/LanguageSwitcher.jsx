@@ -5,7 +5,8 @@ import { Globe } from '@gravity-ui/icons';
 
 const LANGUAGES = [
     { code: 'az', flag: '🇦🇿' },
-    { code: 'en', flag: '🇬🇧' }
+    { code: 'en', flag: '🇬🇧' },
+    { code: 'ru', flag: '🇷🇺' }
 ];
 
 const LanguageSwitcher = () => {

@@ -14,7 +14,8 @@
   },
   "lang": {
     "az": "Azərbaycan",
-    "en": "English"
+    "en": "English",
+    "ru": "Русский"
   },
   "hero": {
     "badge": "Fast & Reliable Cargo Service",
@@ -219,7 +220,22 @@
     "cancelButton": "Cancel",
     "replyError": "An error occurred while sending the reply.",
     "statusChangeError": "An error occurred while changing the status.",
-    "createError": "An error occurred while creating the ticket."
+    "createError": "An error occurred while creating the ticket.",
+    "ai": {
+      "ticketsTabLabel": "My Tickets",
+      "chatTabLabel": "AI Assistant",
+      "welcomeMessage": "Hi! I'm CargoMS's AI assistant. Ask me about shipping, rates, customs rules, or how to use the platform.",
+      "placeholder": "Type your question...",
+      "thinking": "Typing...",
+      "escalateButton": "Escalate to Staff",
+      "newChatButton": "New Chat",
+      "unavailableMessage": "The AI support system is currently unavailable. Please open a regular support ticket from \"My Tickets\" instead.",
+      "sendError": "An error occurred while sending the message.",
+      "escalateError": "An error occurred while escalating the conversation.",
+      "escalateEmptyError": "Chat with the AI first before escalating.",
+      "escalateSuccess": "Your conversation was escalated to a support agent.",
+      "clearConfirm": "Clear the chat history?"
+    }
   },
   "claims": {
     "allClaimsTitle": "All Damage/Loss Claims",
